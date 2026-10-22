@@ -61,7 +61,7 @@ from bimsteelauto.spec import (
 PROJECT_NAME = "PEB Warehouse - 24*36"
 JOB_NUMBER = "DEMO-2026-015"
 DESIGNER = "Ahmed Ali"
-CHECKER = "kopesi"
+CHECKER = ""
 
 
 # ==========================================================================

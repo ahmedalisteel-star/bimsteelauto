@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "freecad": {
+      "command": "python",
+      "args": [
+        "mcp/freecad_mcp.py"
+      ]
+    }
+  }
+}

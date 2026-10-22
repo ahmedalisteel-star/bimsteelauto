@@ -1,0 +1,289 @@
+"""
+FreeCAD RPC Server
+------------------
+Run this INSIDE FreeCAD (via Macro) to open a listening port that lets
+an external program (our MCP server) send it commands.
+
+This keeps your FreeCAD GUI open and visible — you will see objects
+appear live in the 3D view, exactly like the test column we just did
+manually in the Python console.
+
+HOW TO RUN:
+1. In FreeCAD: Macro menu > Macros...
+2. Create a new macro, name it "rpc_server"
+3. Paste this entire file's content into it
+4. Click Execute
+5. You should see a message in the Report View: "FreeCAD RPC server listening on port 9875"
+6. Leave it running — do NOT close FreeCAD while using the MCP server
+"""
+
+import contextlib
+import io
+import threading
+import traceback
+from xmlrpc.server import SimpleXMLRPCServer
+
+import FreeCAD
+
+HOST = "127.0.0.1"
+PORT = 9875
+
+
+def ping():
+    """Simple health check — confirms the server is alive and reachable."""
+    return "pong"
+
+
+# Shared namespace for execute_python — state persists between calls, so a
+# session can import modules once and keep using them (like a console).
+_EXEC_NAMESPACE = {"FreeCAD": FreeCAD}
+
+
+# --- Main-thread executor ---------------------------------------------------
+# FreeCAD document/GUI operations are NOT thread-safe: running them on the
+# XML-RPC worker thread can wedge or crash FreeCAD (confirmed live: creating
+# FeaturePython objects with ViewObjects from the RPC thread killed the
+# server). A Qt signal with a cross-thread (queued) connection hands the work
+# to the GUI main thread; the RPC thread blocks on a queue for the result.
+try:
+    from PySide import QtCore  # FreeCAD's Qt shim (PySide2/6 as appropriate)
+
+    class _MainThreadExecutor(QtCore.QObject):
+        """Runs submitted callables on the Qt main (GUI) thread."""
+
+        trigger = QtCore.Signal(object)
+
+        def __init__(self):
+            super().__init__()
+            # Cross-thread emit -> queued connection -> runs on main thread.
+            self.trigger.connect(self._run)
+
+        @QtCore.Slot(object)
+        def _run(self, fn):
+            fn()
+
+    _EXECUTOR = _MainThreadExecutor()  # created on the main thread (macro)
+except Exception:  # headless / no GUI: fall back to direct execution
+    _EXECUTOR = None
+
+
+def _exec_capture(code):
+    """exec() ``code`` in the shared namespace, capturing stdout/errors."""
+    buffer = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buffer):
+            exec(code, _EXEC_NAMESPACE)
+        return {"ok": True, "output": buffer.getvalue(), "error": ""}
+    except Exception:
+        return {
+            "ok": False,
+            "output": buffer.getvalue(),
+            "error": traceback.format_exc(),
+        }
+
+
+def execute_python(code):
+    """Execute arbitrary Python inside FreeCAD and return captured output.
+
+    This is the bridge's power tool: it lets the external MCP client run
+    BIMSteelAuto (or any) code directly in the live FreeCAD session instead
+    of being limited to the canned methods below. The code is executed on the
+    GUI MAIN THREAD (see _MainThreadExecutor) — required for safe document /
+    ViewObject access. Bound to 127.0.0.1 only — never expose this port
+    beyond localhost.
+
+    Args:
+        code: Python source to exec. print() output is captured.
+
+    Returns:
+        dict: {"ok": bool, "output": captured stdout, "error": traceback
+        string (empty when ok)}.
+    """
+    if _EXECUTOR is None:
+        return _exec_capture(code)
+
+    import queue
+
+    result_queue = queue.Queue()
+
+    def _work():
+        result_queue.put(_exec_capture(code))
+
+    _EXECUTOR.trigger.emit(_work)
+    try:
+        return result_queue.get(timeout=300)
+    except queue.Empty:
+        return {
+            "ok": False,
+            "output": "",
+            "error": "Timed out after 300s waiting for the GUI thread "
+                     "(FreeCAD busy or blocked by a modal dialog).",
+        }
+
+
+def get_version():
+    """Return the FreeCAD version info."""
+    return list(FreeCAD.Version())
+
+
+def new_document(name):
+    """Create a new FreeCAD document. Returns the document name."""
+    doc = FreeCAD.newDocument(name)
+    return doc.Name
+
+
+def list_documents():
+    """List all currently open document names."""
+    return list(FreeCAD.listDocuments().keys())
+
+
+def create_box(doc_name, obj_name, length, width, height, x=0, y=0, z=0):
+    """
+    Create a Part::Box object (used for simple column/beam stand-ins).
+    length/width/height in mm. x/y/z is the placement position in mm.
+    Returns the object name.
+    """
+    doc = FreeCAD.getDocument(doc_name)
+    box = doc.addObject("Part::Box", obj_name)
+    box.Length = length
+    box.Width = width
+    box.Height = height
+    box.Placement = FreeCAD.Placement(
+        FreeCAD.Vector(x, y, z), FreeCAD.Rotation(0, 0, 0, 1)
+    )
+    doc.recompute()
+    return box.Name
+
+
+def recompute(doc_name):
+    """Force a recompute of the document (refresh geometry)."""
+    doc = FreeCAD.getDocument(doc_name)
+    doc.recompute()
+    return True
+
+
+def save_document(doc_name, filepath):
+    """Save the document to a .FCStd file at the given path."""
+    doc = FreeCAD.getDocument(doc_name)
+    doc.saveAs(filepath)
+    return filepath
+
+
+def create_portal_frame_grid(
+    doc_name,
+    span_mm,
+    eave_height_mm,
+    num_frames,
+    bay_spacing_mm,
+    roof_slope_deg,
+    column_width_mm=300,
+    column_depth_mm=150,
+    rafter_width_mm=150,
+    rafter_depth_mm=350,
+):
+    """
+    Build a full duo-pitch (symmetric gable) portal frame grid.
+
+    Creates columns and sloped rafters as simple rectangular boxes
+    (placeholder sections - swap for real EC3-checked sections later).
+    Frame 1 sits at Y=0, each subsequent frame is offset by bay_spacing_mm
+    along Y. X=0 is the left column line, X=span_mm is the right column line.
+
+    Returns a dict with the created object names and computed geometry
+    (apex height, rafter length, overall building length) for reference.
+    """
+    import math
+
+    doc = FreeCAD.getDocument(doc_name)
+    created = []
+
+    half_span = span_mm / 2.0
+    slope_rad = math.radians(roof_slope_deg)
+    rafter_length = half_span / math.cos(slope_rad)
+    apex_height = eave_height_mm + half_span * math.tan(slope_rad)
+
+    for i in range(num_frames):
+        y = i * bay_spacing_mm
+        tag = f"F{i + 1}"
+
+        col_l = doc.addObject("Part::Box", f"Column_{tag}_L")
+        col_l.Length = column_width_mm
+        col_l.Width = column_depth_mm
+        col_l.Height = eave_height_mm
+        col_l.Placement = FreeCAD.Placement(
+            FreeCAD.Vector(0, y, 0), FreeCAD.Rotation(0, 0, 0, 1)
+        )
+        created.append(col_l.Name)
+
+        col_r = doc.addObject("Part::Box", f"Column_{tag}_R")
+        col_r.Length = column_width_mm
+        col_r.Width = column_depth_mm
+        col_r.Height = eave_height_mm
+        col_r.Placement = FreeCAD.Placement(
+            FreeCAD.Vector(span_mm - column_width_mm, y, 0),
+            FreeCAD.Rotation(0, 0, 0, 1),
+        )
+        created.append(col_r.Name)
+
+        raf_l = doc.addObject("Part::Box", f"Rafter_{tag}_L")
+        raf_l.Length = rafter_length
+        raf_l.Width = rafter_width_mm
+        raf_l.Height = rafter_depth_mm
+        raf_l.Placement = FreeCAD.Placement(
+            FreeCAD.Vector(0, y, eave_height_mm),
+            FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -roof_slope_deg),
+        )
+        created.append(raf_l.Name)
+
+        raf_r = doc.addObject("Part::Box", f"Rafter_{tag}_R")
+        raf_r.Length = rafter_length
+        raf_r.Width = rafter_width_mm
+        raf_r.Height = rafter_depth_mm
+        raf_r.Placement = FreeCAD.Placement(
+            FreeCAD.Vector(half_span, y, apex_height),
+            FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), roof_slope_deg),
+        )
+        created.append(raf_r.Name)
+
+    doc.recompute()
+
+    building_length = (num_frames - 1) * bay_spacing_mm
+
+    return {
+        "created_objects": created,
+        "apex_height_mm": apex_height,
+        "rafter_length_mm": rafter_length,
+        "building_length_mm": building_length,
+    }
+
+
+# --- Server setup ---
+try:
+    server = SimpleXMLRPCServer(
+        (HOST, PORT), allow_none=True, logRequests=False
+    )
+except OSError:
+    FreeCAD.Console.PrintWarning(
+        f"RPC server already running on port {PORT} (or port busy) — "
+        f"macro re-run skipped. Restart FreeCAD to reload server code.\n"
+    )
+    raise SystemExit
+server.register_function(ping, "ping")
+server.register_function(execute_python, "execute_python")
+server.register_function(get_version, "get_version")
+server.register_function(new_document, "new_document")
+server.register_function(list_documents, "list_documents")
+server.register_function(create_box, "create_box")
+server.register_function(recompute, "recompute")
+server.register_function(save_document, "save_document")
+server.register_function(create_portal_frame_grid, "create_portal_frame_grid")
+
+
+def serve():
+    server.serve_forever()
+
+
+thread = threading.Thread(target=serve, daemon=True)
+thread.start()
+
+FreeCAD.Console.PrintMessage(f"FreeCAD RPC server listening on port {PORT}\n")

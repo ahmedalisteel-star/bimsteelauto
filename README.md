@@ -28,6 +28,27 @@ Pick **BIMSteelAuto** from FreeCAD's workbench selector. Its commands:
 | **Open output folder** | Opens the calc sheets, drawings, MTO and IFC |
 | **Settings** | Points the workbench at the package folder |
 
+## Build from text with Claude
+
+BIMSteelAuto ships with an **MCP connection** that lets Claude Code (or
+Claude Desktop) drive a live FreeCAD session. Describe the building in
+plain words and Claude fills in the job, runs the design, sizes the
+members until they pass, and builds the model, drawings and MTO in
+FreeCAD while you watch:
+
+> *"Design a 24 x 36 m PEB warehouse in Muscat: clear span, 6 m bays,
+> 6 m eave, 1:10 gable roof, sandwich panel roof, enclosed, V = 45 m/s,
+> Exposure C, Risk Category II. Build it in FreeCAD and give me the
+> tonnage."*
+
+To set it up:
+
+1. Run `rpc_server.FCMacro` inside FreeCAD (it listens on 127.0.0.1 only)
+2. Open Claude Code in this repo folder - `.mcp.json` connects it
+   automatically, and `CLAUDE.md` tells Claude the workflow
+
+Full steps, Claude Desktop setup and security notes: `mcp/README.md`.
+
 ## What it designs
 
 1. **Loads** - ASCE 7-16 load combinations, and the Ch. 28 envelope wind
@@ -83,7 +104,9 @@ bimsteelauto_fc/           FreeCAD adapter: shop model, drawings, MTO schedule, 
 bsa_dxf/                   DXF fabrication drawing set (ezdxf only)
 bsa/                       command line tool
 vendor/                    vendored cold-formed engine and verification references
+mcp/                       Claude <-> FreeCAD MCP bridge (build projects from text)
 tests/                     pytest suite, including verification against the tools above
+CLAUDE.md                  build-from-text workflow that Claude Code follows
 ```
 
 ## Install
