@@ -1,0 +1,101 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report, B1_C1, 2026-08-31",
+  "basis": "AISC Design Guide 4 (CET's Reference page lists DG 4 explicitly)",
+  "settings": "Design Code AISC 15th, Shape Database AISC 15th, Design Method LRFD",
+  "recorded": "2026-08-31",
+  "status": "complete \u2014 inputs and outputs both recorded, run is reproducible",
+  "supersedes": {
+    "fixture": "cet_endplate_4E_B1C1",
+    "why": "the original B1_C1 record had CET's four output numbers but not the geometry that produced them, so it could not be re-run and its test could only skip. This run was made specifically to replace it: same tool, same basis, full inputs captured. The old fixture is kept for provenance \u2014 it is the record of the run that caught defect #1."
+  },
+  "inputs": {
+    "beam": "W24X76, A992 (d 23.9, tf 0.68)",
+    "column": "W18X60, A992, connection to the column FLANGE",
+    "end_plate": "PL 3/4 x 9 x 2'-5-5/16, A992, Fy 50 ksi",
+    "bp": 9.0,
+    "g": 3.5,
+    "pfo": 1.4375,
+    "pfi": 1.4375,
+    "h0": 24.9975,
+    "h1": 21.4425,
+    "tp": 0.75,
+    "Fy_plate_ksi": 50.0,
+    "bolts": "1 in dia A325N, standard holes, bearing",
+    "Ft_ksi": 90.0,
+    "Mu_kipin": 4800.0,
+    "V_kips": 50.0,
+    "N_kips": 0.0,
+    "units": "imperial, as CET prints them \u2014 CET is imperial-only",
+    "note_on_geometry": "bp = 9 in was chosen; g, pfo, pfi and tp were left for CET to design (cyan auto fields) and then read back. Comparing on CET's own geometry rather than forcing it to match is the cleaner test."
+  },
+  "formula_printed_by_cet": {
+    "s": "s = (1/2)*sqrt(bp*g)",
+    "h0": "h0 = d + pf - tf/2",
+    "h1": "h1 = d - tf - pf - tf/2",
+    "Yp_4E": "Yp = (bp/2)[h1(1/pfi + 1/s) + h0(1/pfo) - 1/2] + (2/g)[h1(pfi + s)]",
+    "tp_req": "tp_req = sqrt(1.11*phi*Mnp / (phi_b*Fyp*Yp))   (DG 4 Eq. 3.10)",
+    "db_req": "db_req = sqrt(2*Muc / (pi*phi*Ft*(h0 + h1)))   (DG 4 Eq. 3.5)",
+    "why_this_matters": "CET prints the expression in full, not just the number. That is what exposed defect #1 \u2014 the module's 4E Yp was missing the 1/s term and the -1/2, and only a printed formula could show it. This run confirms the term structure independently on a second, different geometry."
+  },
+  "outputs": {
+    "s": {
+      "cet": 2.80624,
+      "mine": 2.80624,
+      "unit": "in",
+      "tol_pct": 0.02
+    },
+    "Pt": {
+      "cet": 70.6858,
+      "mine": 70.6858,
+      "unit": "kips",
+      "tol_pct": 0.02
+    },
+    "Mnp": {
+      "cet": 6565.3,
+      "mine": 6565.3,
+      "unit": "kip-in",
+      "tol_pct": 0.02
+    },
+    "Yp": {
+      "cet": 229.51,
+      "mine": 229.51,
+      "unit": "in",
+      "tol_pct": 0.02
+    },
+    "tp_req": {
+      "cet": 0.7275,
+      "mine": 0.7275,
+      "unit": "in",
+      "tol_pct": 0.02
+    },
+    "db_req": {
+      "cet": 0.9873,
+      "mine": 0.9873,
+      "unit": "in",
+      "tol_pct": 0.02
+    }
+  },
+  "agreement": "all six quantities within 0.005%",
+  "pending_4ES": {
+    "status": "RUN 2026-08-31 \u2014 DEFECT #10 FOUND AND FIXED. Flag stays False.",
+    "de_used_by_cet": 1.25,
+    "formula_printed_by_cet": "Yp = (bp/2)[h1(1/pfi + 1/s) + h0(1/pfo + 1/(2s))] + (2/g)[h1(pfi + s) + h0(de + pfo)]",
+    "module_formula_before_fix": "Yp = (bp/2)[h1(1/pfi) + h0(1/pfo)] + (2/g)[h1(pfi + s) + h0(de + pfo)]",
+    "missing_terms": {
+      "(bp/2)*h1*(1/s)": 34.384,
+      "(bp/2)*h0*(1/(2s))": 20.043,
+      "sum": 54.427,
+      "note": "the two omissions account for the ENTIRE gap, exactly"
+    },
+    "registered_prediction": 235.764,
+    "cet": 290.191,
+    "delta_pct_before_fix": -18.76,
+    "after_fix": 290.191,
+    "delta_pct_after_fix": 0.0002,
+    "direction": "CONSERVATIVE. A low Yp raises tp_req \u2014 the module wanted 0.7178 in against CET's 0.6470, +10.9% thicker. Unlike defect #9a this one was never dangerous, only wrong.",
+    "why_no_invariant_test_caught_it": "the only structural invariant is Yp(4ES) > Yp(4E), and it still held \u2014 235.764 > 229.510. It was just 2.7% instead of the correct 26.4%. A relative test cannot see the difference between a small stiffening gain and a large one.",
+    "the_hypothesis_was_half_right": "the standing hypothesis was that 4ES mirrored 4E and was missing the same 1/s and -1/2. Half right: the 1/s on h1 WAS missing. But 4ES has no -1/2 at all, and it carries a 1/(2s) on h0 that 4E does not \u2014 a term nobody predicted. Reasoning from the shape of the earlier defect would have produced a different wrong formula. Only the printed expression settled it.",
+    "flag_decision": "endplate.VERIFIED['4ES'] stays FALSE. The formula was taken FROM this run, so checking it against this run is circular \u2014 exactly what HANDOVER section 7 forbids. Verification needs a SECOND 4ES run on DIFFERENT geometry: different beam, bp, g, pf and de. Fix on run 1, verify on run 2."
+  }
+}

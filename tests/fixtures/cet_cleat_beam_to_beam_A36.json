@@ -1,0 +1,52 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 08, B1_B1, 2026-08-31",
+  "settings": "AISC 15th / LRFD",
+  "recorded": "2026-08-31",
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+
+  "role": "SECOND cleat geometry. The first (cet_cleat_singleplate_W18x50) closed the flag but rested on one case; its recorded limitation was 'one geometry, one bolt count, one configuration'. This addresses that.",
+  "note_on_origin": "produced while attempting the GUSSET run — the Connection Setup was still 'Beam To Beam Web', so it is another single plate rather than a brace connection. Useful anyway, and kept.",
+
+  "what_differs_from_the_first_case": {
+    "plate_grade": "A36 (Fy 36, Fu 58 ksi)  vs  A992 (50 / 65)",
+    "bolt_diameter": "7/8 in  vs  3/4 in",
+    "row_spacing": "3 in  vs  5 in",
+    "plate": "1/2 x 2-3/4 x 8-1/4  vs  3/8 x 3-1/2 x 12",
+    "edge_distances": "1.125 / 1.125  vs  1.0 / 1.5",
+    "eccentricity": "1.625 in  vs  2.0 in",
+    "support": "beam-to-beam web  vs  beam-to-column flange",
+    "load": "40 kips  vs  30 kips"
+  },
+
+  "inputs": {
+    "beam": "W18X50, A992 (tw 0.355)",
+    "supporting": "W18X50 web",
+    "plate": "PL 1/2 x 2-3/4 x 8-1/4, A36",
+    "t_cleat": 0.5, "h_cleat": 8.25,
+    "n_bolts": 3, "d_bolt": 0.875, "d_hole": 0.9375,
+    "row_spacing_pitch": 3.0,
+    "edge_end_vertical": 1.125,
+    "edge_side_horizontal_leh": 1.125,
+    "eccentricity_bolt_line_to_weld_line": 1.625,
+    "V_kips": 40.0, "units": "imperial"
+  },
+
+  "comparison": {
+    "shear yield/rupture (J4.2)": {"module": 68.51, "cet": 68.51, "delta_pct": 0.00},
+    "block shear (J4.3)":         {"module": 71.72, "cet": 71.31, "delta_pct": 0.60},
+    "bolt shear (J3.6)":          {"module": 56.70, "cet": 58.89, "delta_pct": -3.70}
+  },
+
+  "why_shear_rupture_is_EXACT_here": "the module's A36 table is (250, 400) MPa against the exact (248.2, 400.0). Shear rupture depends on Fu alone, and Fu is exact — so the 0.4% residual seen on the A992 case disappears. That is a clean confirmation that the 0.4% there was grade-table rounding and not a formula difference, which was the stated assumption.",
+
+  "elastic_coefficient_check": {
+    "cet_instantaneous_centre_C": 2.4181,
+    "module_elastic_C": 2.3283,
+    "conservative_by_pct": 3.7,
+    "first_case_conservative_by_pct": 10.0,
+    "conclusion": "the elastic method is conservative on BOTH geometries, by 3.7% and 10.0%. The margin narrows as the eccentricity falls relative to the bolt group depth, which is the expected behaviour — the two methods converge for a concentric group."
+  },
+
+  "residual": "block shear reads 0.6% HIGH on this case with an exact Fu, so it is a small genuine difference in the assumed failure path rather than grade rounding. Below any tolerance that matters, but it is not zero and is recorded rather than rounded away."
+}

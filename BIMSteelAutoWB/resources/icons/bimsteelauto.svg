@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>BIMSteelAuto</title>
+  <!-- A portal frame: two tapered columns and a pitched rafter pair. -->
+  <g fill="#3b5b7a" stroke="none">
+    <!-- left column, deep at the eave -->
+    <path d="M6 56 L6 50 L13 50 L13 22 L6 20 L6 14 L18 16 L18 50 L20 50 L20 56 Z"/>
+    <!-- right column, mirrored -->
+    <path d="M58 56 L58 50 L51 50 L51 22 L58 20 L58 14 L46 16 L46 50 L44 50 L44 56 Z"/>
+  </g>
+  <g fill="#a3121f" stroke="none">
+    <!-- rafters, deep at the haunch and shallow at the ridge -->
+    <path d="M5 14 L17 15 L32 6 L32 11 L18 19 L5 18 Z"/>
+    <path d="M59 14 L47 15 L32 6 L32 11 L46 19 L59 18 Z"/>
+  </g>
+  <g stroke="#3b5b7a" stroke-width="1.6" fill="none" opacity="0.55">
+    <!-- base line -->
+    <path d="M2 58 L62 58"/>
+  </g>
+</svg>

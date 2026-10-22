@@ -1,0 +1,100 @@
+{
+ "source": "CET.SteelConnDesign V2.0",
+ "report": "Connection Design Report 09, BR1_C1_B1, 2026-08-31",
+ "settings": "AISC 15th / LRFD",
+ "recorded": "2026-08-31",
+ "status": "complete inputs and outputs \u2014 the arithmetic discrepancy is RESOLVED, see resolution",
+ "inputs": {
+  "brace": "HSS5X5X1/4, A992, at 45 deg",
+  "column": "W14X90",
+  "beam": "W18X50",
+  "gusset": "PL 10-1/2 x 12 x 3/8, A36 (Fy 36, Fu 58 ksi)",
+  "t_gusset": 0.375,
+  "brace_to_gusset_plate": "PL 4-3/4 x 6-1/4 x 1/4, A36",
+  "bolts": "5/8 in A325N, 2 rows x 2 cols at 3 in, standard holes 0.6875",
+  "l_connection": 3.0,
+  "w_first_row": 3.0,
+  "l_buckling_from_CET": 6.82843,
+  "K_used_by_CET": 0.65,
+  "tension_kips": 25.0,
+  "compression_kips": 35.0,
+  "units": "imperial"
+ },
+ "whitmore_width": {
+  "cet": 6.4641,
+  "module": 6.4641,
+  "delta_pct": 0.0,
+  "significance": "EXACT. bw = w0 + 2*l*tan(30) = 3 + 2*3*tan30 = 6.4641. This confirms both the formula and the 30 degree spread angle the module assumes, which was the single largest risk flagged before the run."
+ },
+ "tension_yield": {
+  "cet": 94.51,
+  "module": 79.1,
+  "delta_pct": -16.3,
+  "explained": "CET's Whitmore section runs OFF the gusset and into the beam web, and it counts that: 0.9*(36*6.4641*0.375 + 50*1.0*0.355) = 94.51. The module truncates at the gusset and takes 0.9*Fy*bw*t only. The module is therefore CONSERVATIVE by the beam-web contribution \u2014 a defensible modelling choice, not an error.",
+  "module_vs_gusset_only_hand_calc": "78.53 hand vs 79.10 module = +0.7%, which is the A36 table (250 vs 248.2 MPa)"
+ },
+ "K_factor": {
+  "cet": 0.65,
+  "module_default": 1.2,
+  "note": "CET uses K = 0.65 for the gusset buckling length. The module defaults to 1.2 (a gusset supported on two edges). The module's default is the more conservative of the two; at K = 1.2 it gives 58.38 kips against 72.36 at K = 0.65. This is a real modelling difference and must be chosen deliberately per detail, not inherited."
+ },
+ "flag_decision": {
+  "secondary.gusset": "CLOSED \u2014 flipped True 2026-08-31",
+  "why": "The Whitmore width matches exactly and the full Chapter E buckling chain (r, Lc/r, Fe, E3-2 Fcr) matches CET to seven figures. The only disagreement was CET's final multiply, which is now diagnosed as Fy substituted for Fcr and is unconservative. The reference reconciles; it just reconciles by showing the reference wrong on one line.",
+  "not_circular": "The module's Fcr was computed from CET's reported K and l_buckling by the module's OWN r, Fe and E3-2. No formula was taken from CET and then checked against CET. HANDOVER section 7 satisfied.",
+  "residual_coverage_gaps": [
+   "block shear on the gusset not compared directly (the run printed none); routes through the same pyaisc360 block_shear_strength verified for the cleat at +0.2%",
+   "K is a modelling input, not a verified formula \u2014 CET 0.65, module default 1.2 (58.38 vs 72.36 kips on this gusset)",
+   "no gusset-to-beam / gusset-to-column weld check, and no Thornton interface-force distribution"
+  ]
+ },
+ "what_IS_established_by_this_run": [
+  "the Whitmore width formula and its 30 degree spread \u2014 exact",
+  "the tension-yield relation on the gusset \u2014 matches to grade-table rounding once the beam-web contribution is accounted for",
+  "the module's Chapter E inelastic buckling path reproduces a hand calc from CET's own Fcr and Ag to 0.7%"
+ ],
+ "resolution": {
+  "date": "2026-08-31",
+  "verdict": "CET's Fcr is CORRECT and matches the module to seven figures. CET's FINAL PRODUCT is wrong: it multiplies by Fy instead of Fcr.",
+  "the_chain_that_matches": {
+   "bw_in": {
+    "formula": "w0 + 2*l*tan(30)",
+    "module": 6.4641,
+    "cet": 6.4641,
+    "delta_pct": 0.0
+   },
+   "r_in": {
+    "formula": "t/sqrt(12) = 0.375/3.46410",
+    "value": 0.10825
+   },
+   "Lc_over_r": {
+    "formula": "K*L/r = 0.65*6.82843/0.10825",
+    "value": 41.001
+   },
+   "Fe_ksi": {
+    "formula": "pi^2*E/(Lc/r)^2, E=29000",
+    "value": 170.2592
+   },
+   "Fcr_ksi": {
+    "formula": "0.658^(Fy/Fe)*Fy  (AISC Eq. E3-2)",
+    "module": 32.9509,
+    "cet": 32.9509,
+    "delta_pct": 0.0,
+    "significance": "SEVEN FIGURES. Nothing but the correct r, Lc/r, Fe and E3-2 reproduces a printed Fcr to that precision. This verifies the entire Chapter E buckling path in one comparison."
+   }
+  },
+  "what_78_54_actually_is": {
+   "cet_prints": "phi*Pn = 0.9(32.9509)(6.4641)(0.375) = 78.54 kips",
+   "that_expression_evaluates_to": 71.8869,
+   "0.9*Fy*Ag": 78.5388,
+   "conclusion": "78.54 = 0.9 x 36 x 2.42404 to four figures. CET computed Fcr correctly and then multiplied by Fy instead of Fcr.",
+   "is_it_defensible": "No. Pn = Fcr*Ag (Eq. E3-1) and Fcr <= Fy always, so 78.54 > 71.89 is UNCONSERVATIVE. Sect. J4.4(a)'s Pn = Fy*Ag is limited to Lc/r <= 25; this element is at 41.0."
+  },
+  "module_position": {
+   "module_kips": 72.36,
+   "hand_calc_kips": 71.8869,
+   "delta_pct": 0.66,
+   "explained": "the A36 grade table carries Fy = 250 MPa against 36 ksi = 248.211 MPa. Not a formula difference."
+  }
+ }
+}

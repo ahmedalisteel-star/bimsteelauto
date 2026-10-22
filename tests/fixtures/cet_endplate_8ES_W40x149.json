@@ -1,0 +1,66 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 03, B1_C1, 2026-08-31",
+  "basis": "AISC Design Guide 4",
+  "settings": "Design Code AISC 15th, Shape Database AISC 15th, Design Method LRFD",
+  "recorded": "2026-08-31",
+
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+  "role": "RUN 1 for 8ES — it SUPPLIED the corrected formula (defect #11). It cannot also verify it. A second 8ES run on different geometry is required before endplate.VERIFIED['8ES'] may be flipped.",
+
+  "provenance_caveat": "UNLIKE the 4E and 4ES run-2 checks, this was NOT a blind prediction. The text extraction returned the input block and CET's Yp line together, so the module's value was computed with CET's answer already visible. The missing term is real and arithmetically exact either way, but this run carries none of the predictive weight that run 2 of 4ES did.",
+
+  "inputs": {
+    "beam": "W40X149, A992 (d 38.2, tf 0.83)",
+    "column": "W18X60, A992, connection to the column FLANGE",
+    "end_plate": "PL 1/2 x 11-7/8 x 4'-0, A992, Fy 50 ksi",
+    "config": "8ES — eight bolts, stiffened",
+    "bp": 11.875,
+    "g": 3.5,
+    "pfo": 1.0,
+    "pfi": 1.0,
+    "de": 0.875,
+    "pb": 3.0,
+    "h1": 41.785,
+    "h2": 38.785,
+    "h3": 35.955,
+    "h4": 32.955,
+    "tp": 0.5,
+    "Fy_plate_ksi": 50.0,
+    "bolts": "0.625 in dia A325N, standard holes, bearing",
+    "Ft_ksi": 90.0,
+    "Mu_kipin": 4800.0,
+    "V_kips": 50.0,
+    "N_kips": 0.0,
+    "units": "imperial"
+  },
+
+  "formula_printed_by_cet":
+    "Yp = (bp/2)[h1/(2de) + h2/pfo + h3/pfi + h4/s] + (2/g)[h1(de + pb/4) + h2(pfo + 3pb/4) + h3(pfi + pb/4) + h4(s + 3pb/4) + pb^2] + g",
+
+  "defect_11": {
+    "module_formula_before_fix": "same, but the (2/g) bracket ended at h4(s + 3pb/4) — the trailing pb^2 was absent",
+    "missing_term": "(2/g)*pb^2",
+    "missing_term_value": 5.1429,
+    "module_before_fix": 899.599,
+    "cet": 904.742,
+    "delta_pct_before_fix": -0.568,
+    "after_fix": 904.742,
+    "direction": "CONSERVATIVE — a low Yp raises tp_req. Small: 0.57% on Yp, ~0.28% on the plate thickness.",
+    "why_nothing_could_have_caught_it": "at 0.57% this is far inside any tolerance anyone would eyeball, it breaks no monotonicity, and it leaves every dimensional check intact. No invariant test, no sanity check and no comparison of headline numbers would ever surface it. Only the printed expression.",
+    "note_on_the_form": "the module already carried the unusual standalone '+ g' term, so whoever wrote it had most of this expression right. Exactly one term was dropped."
+  },
+
+  "outputs": {
+    "s":      {"cet": 3.22345, "unit": "in", "tol_pct": 0.02},
+    "Yp":     {"cet": 904.742, "unit": "in", "tol_pct": 0.02},
+    "tp_req": {"cet": 0.4108,  "unit": "in", "tol_pct": 0.05},
+    "db_req": {"cet": 0.5503,  "unit": "in", "tol_pct": 0.05}
+  },
+
+  "flag_decision": {
+    "endplate.8ES": "STAYS FALSE",
+    "why": "the formula came FROM this run. Checking it against this run is the circular check HANDOVER section 7 forbids — the same reason 4ES stayed open after its run 1. Needs a second 8ES case on different geometry: different beam, bp, and ideally a different pb, since pb is the variable in the corrected term.",
+    "what_run_2_should_vary": "pb above all — it is squared in the missing term, so a different pb is the sharpest test. Also bp, g and de."
+  }
+}

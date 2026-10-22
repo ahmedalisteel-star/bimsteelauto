@@ -1,0 +1,48 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 04, B1_C1, 2026-08-31",
+  "basis": "AISC Design Guide 4",
+  "settings": "AISC 15th / LRFD",
+  "recorded": "2026-08-31",
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+
+  "role": "8ES run 2. Confirms most of the expression on new geometry, but does NOT discriminate the term added by defect #11. Flag stays False.",
+
+  "provenance_caveat": "again NOT a blind prediction. CET's Yp line embeds every sub-term, so any text search for a sub-term returns the total as well. Two attempts at blind extraction, two failures. The fix is procedural, not technical: inputs and outputs must arrive in SEPARATE messages, which is what CET_RUN_GUIDE.md said in the first place.",
+
+  "inputs": {
+    "beam": "W36X150, A992 (d 35.9, tf 0.94)",
+    "column": "W18X60, A992, to the column flange",
+    "config": "8ES",
+    "bp": 12.0, "g": 3.5, "pfo": 1.0, "pfi": 1.0, "de": 0.875, "pb": 3.0,
+    "h1": 39.43, "h2": 36.43, "h3": 33.49, "h4": 30.49,
+    "Mu_kipin": 4800.0, "V_kips": 50.0, "units": "imperial"
+  },
+
+  "outputs": { "Yp": {"cet": 853.2, "mine": 853.225, "unit": "in", "tol_pct": 0.02} },
+  "agreement": "0.003%",
+
+  "why_this_does_not_close_the_flag": {
+    "identical_between_runs": ["g = 3.5", "de = 0.875", "pb = 3.0"],
+    "the_problem": "the term added by defect #11 is (2/g)*pb^2. With BOTH g and pb identical in the two runs, that term contributes exactly 5.1429 in to each. Run 2 therefore exercises it at the same value as run 1 and cannot discriminate its form at all.",
+    "what_run_2_DID_establish": "the rest of the expression — the bp/2 bracket, the four h-terms and the standalone +g — reproduced on a different bp (12.0 vs 11.875), s (3.24037 vs 3.22345) and all four h values. That part is genuinely confirmed twice.",
+    "candidates_still_alive": "any f(pb, g) with f(3.0, 3.5) = 5.1429 fits both runs: pb^2, pb^3/3, and near-misses like pb^2/2, 2*pb and pb*s are all within 3.4 in at pb = 3.0."
+  },
+
+  "run_3_predictions_registered_2026-08-31": {
+    "geometry": "W36X150 as above; change ONLY the bolt Row Spacing, which sets pb",
+    "note": "Row Spacing is a WHITE (user-editable) field on the To Column tab — pb can be forced",
+    "candidates": {
+      "pb_3.5": {"pb^2 (module)": 874.24, "pb^2/2": 870.74, "2*pb": 871.24, "pb*s": 873.72, "pb^3/3": 875.41},
+      "pb_4.0": {"pb^2 (module)": 895.40, "pb^2/2": 890.83, "2*pb": 890.83, "pb*s": 893.67, "pb^3/3": 898.45},
+      "pb_4.5": {"pb^2 (module)": 916.71, "pb^2/2": 910.92, "2*pb": 910.28, "pb*s": 913.47, "pb^3/3": 922.49},
+      "pb_5.0": {"pb^2 (module)": 938.16, "pb^2/2": 931.01, "2*pb": 929.58, "pb*s": 933.13, "pb^3/3": 947.68}
+    },
+    "recommended": "pb = 5.0 — the candidates spread ~14 in there against ~3.4 in at pb = 3.0. Use 4.5 or 5.0 if CET accepts it."
+  },
+
+  "flag_decision": {
+    "endplate.8ES": "STAYS FALSE",
+    "closes_when": "a run at a different pb reproduces the pb^2 prediction and rules out the alternatives above."
+  }
+}

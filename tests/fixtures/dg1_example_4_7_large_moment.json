@@ -1,0 +1,90 @@
+{
+  "source": "AISC Design Guide 1, 2nd ed., Example 4.7 - Large Moment Base Plate Design (p. 38)",
+  "recorded": "2026-08-31",
+  "status": "complete_inputs_and_outputs",
+  "blind": false,
+  "blind_note": "NOT a blind check. The worked solution arrived in the SAME message as the inputs, so no prediction could be registered before the answer was visible. This record therefore CONFIRMS flags that were already closed against the DG 1 text; per HANDOVER section 7 it is not used to close any flag, and no code was changed to match it.",
+
+  "inputs_imperial": {
+    "column": "W12x96",
+    "d_in": 12.7,
+    "bf_in": 12.2,
+    "tf_in": 0.900,
+    "P_D_kips": 100.0,
+    "P_L_kips": 160.0,
+    "M_D_kip_in": 1000.0,
+    "M_L_kip_in": 1500.0,
+    "Pu_kips": 376.0,
+    "Mu_kip_in": 3600.0,
+    "N_in": 20.0,
+    "B_in": 20.0,
+    "anchor_edge_distance_in": 1.5,
+    "f_in": 8.5,
+    "Fy_ksi": 36.0,
+    "fc_prime_ksi": 4.0,
+    "A2_over_A1": 1.0,
+    "bending_axis": "strong"
+  },
+
+  "inputs_si": {
+    "N_mm": 508.0, "B_mm": 508.0, "d_mm": 322.58, "bf_mm": 309.88,
+    "tf_mm": 22.86, "f_mm": 215.9,
+    "Pu_kN": 1672.53, "Mu_kNm": 406.745,
+    "fc_prime_MPa": 27.5790, "plate_grade": "A36 (module Fy = 250 MPa)"
+  },
+
+  "agreements": {
+    "note": "Every geometric and bearing quantity reproduces exactly.",
+    "m_in":       {"dg1": 3.97,  "module": 3.968,  "delta_pct": -0.05},
+    "n_in":       {"dg1": 5.12,  "module": 5.120,  "delta_pct":  0.00},
+    "governing_cantilever": {"dg1": "n controls", "module": "n", "match": true},
+    "q_max_kip_per_in": {"dg1": 44.2, "module": 44.200, "delta_pct": 0.00},
+    "e_in":       {"dg1": 9.57,  "module": 9.574,  "delta_pct":  0.04},
+    "e_crit_in":  {"dg1": 5.75,  "module": 5.747,  "delta_pct": -0.05},
+    "f_p_ksi":    {"dg1": 2.21,  "module": 2.2100, "delta_pct":  0.00},
+    "t_bearing_interface_in": {
+      "dg1": 1.90, "module": 1.884, "delta_pct": -0.84,
+      "explained_exactly": "DG 1 prints the rounded coefficient 1.5 where the exact value is 2/sqrt(0.9) = 1.4907 (-0.62%), and Fy 36 ksi = 248.211 MPa where the module's A36 palette carries 250 MPa (-0.36% on sqrt). 1.9029 x 0.99381 x 0.99642 = 1.8843 = the module's number to four figures.",
+      "governs": true
+    },
+    "plate_selected": {"dg1": "use 2 in.", "module_mm": 50.0, "module_in": 1.969, "match": true}
+  },
+
+  "disagreements": {
+    "Y_in":  {"dg1": 12.0, "module": 12.606, "delta_pct": 5.05},
+    "T_anchor_kips": {"dg1": 156, "module": 181.19, "delta_pct": 16.15},
+    "cause": "DG 1 Example 4.7 substitutes f = 9.5 in. into Eq. 3.4.3 and 3.4.4, two lines after computing f = N/2 - 1.5 = 8.5 in. for the same 20x20 plate. 9.5 is N/2 from the FIRST iteration (the 19x19 trial). The slip is visible inside one inequality: the same check prints (f + N/2)^2 = (8.5 + 10)^2 = 342 using f = 8.5, and 2Pu(e+f)/qmax = (2)(376)(9.57 + 9.5)/44.2 = 324 using f = 9.5.",
+    "arithmetic_proof": {
+      "with_f_8p5": {"half_sq": 342.25, "term": 307.51, "sqrt": 5.894, "Y": 12.606, "T": 181.19},
+      "with_f_9p5": {"half_sq": 380.25, "term": 324.52, "sqrt": 7.465, "Y": 12.035, "T": 155.95},
+      "example_prints": {"half_sq": 342, "term": 324, "sqrt": 7.47, "Y": 12.0, "T": 156}
+    },
+    "verdict": "The module reproduces the example EXACTLY when the example's own stated f = 8.5 is used. The formula is confirmed; the printed Y and T are not reproducible from the example's own stated geometry.",
+    "consequence_in_the_example": "The example proportions the anchors on T = 156 kips -> 52 kips per rod against phiRn = 57.7 kips for a 1-1/2 in. Grade 36 rod. With T = 181.2 kips the demand is 60.4 kips per rod, which EXCEEDS 57.7. The rod size the example concludes with would not check out.",
+    "conclusions_unaffected": [
+      "The Eq. 3.4.4 existence check still passes: 307.5 < 342.25.",
+      "The tension-interface thickness still does not govern: 1.55-1.71 in. against 1.90 in. at the bearing interface.",
+      "The plate thickness conclusion (use 2 in.) is unchanged."
+    ]
+  },
+
+  "open_question_tension_lever_arm": {
+    "module": "x = f - d/2 + tf/2  (= 2.60 in. here), per the reading of Eq. 3.4.6 recorded in baseplate.py on 2026-08-31",
+    "example_4_7": "x = N/2 - d/2 - 1.5 = f - d/2 = 2.15 in.  (no tf/2 term)",
+    "direction": "The module's arm is LONGER, so its tension-interface thickness is HIGHER. Conservative, not dangerous. t_up is 1.706 in. with tf against 1.552 in. without.",
+    "governs_here": false,
+    "status": "RESOLVED 2026-08-31 in the MODULE's favour. Eq. 3.4.6 printed text reads x = f - d/2 + tf/2, and its prose states the span is measured to the CENTER OF THE COLUMN FLANGE. Example 4.7 measures to the OUTER FACE and is short by tf/2. See dg1_2nd_ed_sect_3_4_text.json.",
+    "verdict": "This is the SECOND error in Example 4.7. The module conforms to the governing equation; the tf/2 term stays and the omitted-tf warning is correct as written.",
+    "flag_impact": "baseplate.thickness stays True. The governing check in this example (bearing interface) matches to 0.84%, fully explained."
+  },
+
+  "flags_this_confirms": [
+    "baseplate.bearing",
+    "baseplate.eccentricity",
+    "baseplate.thickness",
+    "baseplate.lambda"
+  ],
+  "flags_this_can_close": [],
+  "flags_this_cannot_close": ["secondary.gusset"],
+  "gusset_note": "DG 1 has no brace or gusset content. This record does nothing for secondary.gusset."
+}

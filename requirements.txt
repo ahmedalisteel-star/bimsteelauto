@@ -1,0 +1,27 @@
+# BIMSteelAuto - the ENGINE's dependencies.
+#
+# These are NOT in the package folder and must be installed on any new PC:
+#     py -m pip install -r requirements.txt
+#
+# FreeCAD needs NONE of these. The adapter reads design_result.json and
+# imports only pure-Python parts of the engine, which is the whole point of
+# the JSON boundary.
+#
+# The cold-formed library (aisi_s100.py, direct_strength.py) IS in the
+# folder and needs no install.
+
+# Frame analysis - second-order (P-Delta) portal frame
+PyNiteFEA==3.0.0
+
+# AISC 360-16 - my own library, pinned to the commit this was verified on
+pyaisc360 @ git+https://github.com/ahmedalisteel-star/pyaisc360.git@007a3f6f47ceaacf28b5f4da479a38bff8d7eb30
+
+# PyNite's own dependencies, pinned to what the 858-test run used
+numpy==2.5.1
+scipy==1.18.0
+
+# Testing
+pytest==9.1.1
+
+# Only needed to re-read the Struware verification PDF
+pypdf==6.15.0

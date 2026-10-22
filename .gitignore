@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.FCBak
+*.bak
+
+# job inputs and outputs stay local
+jobs/
+out/
+Claude outputs/
+job_*.py
+*.log
+design_result.json

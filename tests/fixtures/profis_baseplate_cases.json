@@ -1,0 +1,307 @@
+{
+  "source": "Hilti PROFIS Engineering 3.1.34",
+  "report": "BASEPLATE VERIFY, 8/30/2026",
+  "compare_against": "section 2.3, 'Equivalent rigid anchor plate (CBFEM)' column \u2014 NOT the 'CBFEM anchor plate design' column.",
+  "recorded": "2026-08-30",
+  "status": "Cases C, D and E all run. All three DISAGREE. The unified 'flange lever arm' explanation proposed after C and D is REJECTED by E. See candidate_defect_9.",
+  "model": {
+    "provenance": "recovered 2026-08-30 by inverting the predictions, then CONFIRMED against the PROFIS report: plate 450x450x50, tension resultant at y = 175.0 mm (section 1.2), f'c 30 MPa, h 800 mm, hef 450, 2x2 @ 350, ca 450 all round (ANc 1,125,000 / ANco 810,000).",
+    "N": 450.0,
+    "B": 450.0,
+    "t_plate_actual": 50.0,
+    "plate_material_actual": "ASTM A36, Fy = 248.21 MPa",
+    "profile": "IPE 300 (d 300.0, bf 150.0, tw 7.1, tf 10.7), ASTM A500 Gr.B",
+    "d": 300.0,
+    "bf": 150.0,
+    "tf": 10.7,
+    "f": 175.0,
+    "A2_over_A1": 1.0,
+    "plate_grade": "S355JR",
+    "fc_prime": 30.0,
+    "phiPp": 3356.4375,
+    "q_max": 7.45875,
+    "note_on_plate_grade": "the module runs were made with S355JR; PROFIS's plate is A36. Grade affects the THICKNESS check only, not T_anchor, so the Case C comparison is unaffected. Re-run the thickness side with A36 before using it."
+  },
+  "sign_convention": "PROFIS takes N positive in TENSION. This module takes Pu positive in COMPRESSION. The module_input column below is already negated relative to the PROFIS sheet.",
+  "cases": {
+    "A": {
+      "profis_input": {
+        "N": -150.0,
+        "Mx": 0.0,
+        "Vx": 60.0
+      },
+      "module_input": {
+        "Pu": 150.0,
+        "Mu": 0.0,
+        "Vu": 60.0
+      },
+      "predicted": 0.0,
+      "profis_rigid": -0.005,
+      "unit": "kN",
+      "branch": "concentric",
+      "status": "closed \u2014 matched"
+    },
+    "C": {
+      "profis_input": {
+        "N": -150.0,
+        "Mx": 120.0,
+        "Vx": 60.0
+      },
+      "module_input": {
+        "Pu": 150.0,
+        "Mu": 120.0,
+        "Vu": 60.0
+      },
+      "predicted": 241.283,
+      "profis_rigid": 306.481,
+      "profis_rigid_per_anchor": [
+        153.2,
+        153.281
+      ],
+      "profis_cbfem": 328.409,
+      "unit": "kN",
+      "branch": "large e \u2014 DG 1 Sect. 3.4 quadratic",
+      "status": "DISAGREES \u2014 module is 21.3% LOW, i.e. UNCONSERVATIVE",
+      "delta_pct": -21.27,
+      "diagnosis": {
+        "not_an_arithmetic_error": "the module satisfies both equilibrium equations exactly: C - T = 150.000 kN against Pu = 150, and T*f + C*a = 120.000 kNm against Mu = 120. It also reproduces DG 1 Sect. 3.4 exactly: q_max*Y*(f + N/2 - Y/2) = 146,244 vs Pu*(e+f) = 146,250 kN.mm.",
+        "the_actual_difference": "where the compression resultant sits.",
+        "module_lever_arm": 198.77,
+        "profis_lever_arm_backed_out": 145.386,
+        "compression_flange_CL": 144.65,
+        "cbfem_reported_resultant": 142.7,
+        "conclusion": "PROFIS delivers the compression through the COLUMN FLANGE. Placing C at (d - tf)/2 = 144.65 mm and re-solving gives T = 307.532 kN against PROFIS's 306.481 \u2014 agreement to 0.34%. The module, following DG 1, spreads bearing into a rectangular block at the PLATE EDGE, which is a 54 mm longer lever arm and therefore less anchor tension.",
+        "equivalent_statement": "the same gap is reproduced by running the DG 1 quadratic with an effective bearing width of 173 mm instead of the full 450 mm plate \u2014 i.e. roughly the IPE 300 flange (150 mm) plus spread."
+      },
+      "severity": {
+        "direction": "unconservative in every combination tested \u2014 the module never reads high",
+        "range_pct": "-5.1% to -29.9%",
+        "sweep": [
+          {
+            "Pu": 150,
+            "Mu": 120,
+            "module": 241.3,
+            "flange_model": 307.5,
+            "delta_pct": -21.5
+          },
+          {
+            "Pu": 150,
+            "Mu": 90,
+            "module": 156.4,
+            "flange_model": 213.7,
+            "delta_pct": -26.8
+          },
+          {
+            "Pu": 150,
+            "Mu": 150,
+            "module": 329.1,
+            "flange_model": 401.4,
+            "delta_pct": -18.0
+          },
+          {
+            "Pu": 300,
+            "Mu": 120,
+            "module": 167.9,
+            "flange_model": 239.7,
+            "delta_pct": -29.9
+          },
+          {
+            "Pu": 300,
+            "Mu": 200,
+            "module": 417.5,
+            "flange_model": 489.9,
+            "delta_pct": -14.8
+          },
+          {
+            "Pu": 600,
+            "Mu": 250,
+            "module": 484.7,
+            "flange_model": 510.6,
+            "delta_pct": -5.1
+          },
+          {
+            "Pu": 100,
+            "Mu": 120,
+            "module": 266.2,
+            "flange_model": 330.2,
+            "delta_pct": -19.4
+          },
+          {
+            "Pu": 50,
+            "Mu": 80,
+            "module": 180.8,
+            "flange_model": 227.6,
+            "delta_pct": -20.6
+          }
+        ],
+        "trend": "the gap closes as the plate shrinks toward the profile: N=B=400 gives -10.1%, 420 gives -15.0%, 450 gives -21.5%. Consistent with the overhang being the mechanism."
+      },
+      "caveats_on_this_run": {
+        "profile_is_grossly_overloaded": "section 3 reports Profile utilisation 342% NOT OK, and section 2.4.1 reports plastic strain 382.85% against a 5.00% limit. The CBFEM solution is therefore deep into gross plasticity, and the anchor force extraction \u2014 including the equivalent-rigid column \u2014 may be contaminated by that redistribution. RE-RUN Case C with a profile that is not failing before treating 306.481 as settled.",
+        "profis_flagged_the_plate": "section 2.7: 'your specified anchor plate may not behave rigid'. Section 2.3: 'User accepted to consider the selected anchor plate as rigid by his/her engineering judgement.' PROFIS did not itself classify this plate as rigid.",
+        "anchors_also_fail": "142% on anchors, breakout 118% 'not recommended'. Does not affect the tension extraction, but the model as run is not a design."
+      },
+      "flag_decision": "DO NOT flip baseplate.eccentricity. Case C did not verify \u2014 it found a systematic unconservative bias. Logged as candidate defect #9."
+    },
+    "D": {
+      "profis_input": {
+        "N": 150.0,
+        "Mx": 80.0,
+        "Vx": 60.0
+      },
+      "module_input": {
+        "Pu": -150.0,
+        "Mu": 80.0,
+        "Vu": 60.0
+      },
+      "predicted": 287.546,
+      "profis_rigid": 306.032,
+      "unit": "kN",
+      "branch": "net uplift \u2014 NOT the DG 1 quadratic",
+      "status": "was +23.7% (conservative) with the broken uplift branch; after the defect #9b fix the module gives 287.546 and reads -6.0%, i.e. UNCONSERVATIVE like C and E",
+      "expect": "a disagreement, predicted in advance and for a DIFFERENT reason than Case C. The branch takes T = |Pu| + Mu/(2f), which implies sum(M) = Mu + Pu*f \u2014 an excess of exactly Pu*f = 26.25 kNm. Rigid-plate equilibrium with the plate-edge block gives T = 287.55 kN.",
+      "equilibrium_prediction": 287.55,
+      "flange_model_prediction": 318.153,
+      "profis_rigid_per_anchor": [
+        152.968,
+        153.064
+      ],
+      "profis_cbfem": 304.438,
+      "delta_pct": -6.04,
+      "correction_to_earlier_prediction": "the flange_model_prediction recorded here before the run was 262.20 kN. That was WRONG \u2014 an arithmetic slip: Pu was taken compression-positive (+150) in a case where the axial load is uplift (-150). Re-derived correctly the flange model gives 318.153 kN. The pre-run decision tree was built on the bad number and none of its three branches matched the actual 306.032; with the corrected prediction, the flange model is the closest of the three at +3.96%.",
+      "model_comparison": {
+        "profis_rigid": 306.032,
+        "module_uplift_branch": {
+          "value": 378.571,
+          "delta_pct": 23.7
+        },
+        "flange_lever_arm": {
+          "value": 318.153,
+          "delta_pct": 3.96
+        },
+        "plate_edge_block": {
+          "value": 287.546,
+          "delta_pct": -6.04
+        }
+      },
+      "compression_lever_arm_backed_out": 169.48,
+      "cbfem_reported_resultant": 179.1,
+      "caveats_on_this_run": {
+        "profile_overloaded": "plastic strain 195.05% against a 5.00% limit (better than Case C's 382.85%, still far over). Re-run with a profile that is not failing.",
+        "profis_flagged_the_plate": "section 2.7: 'your specified anchor plate may not behave rigid'. The rigid classification was accepted by the user, not by PROFIS."
+      },
+      "flag_decision": "DO NOT flip baseplate.eccentricity. Both branches it covers now have a measured disagreement.",
+      "module_at_run_time": 378.571,
+      "module_after_defect_9b_fix": 287.546,
+      "defect_9b_fixed": {
+        "date": "2026-08-30",
+        "was": "T = |Pu| + Mu/(2f) \u2014 satisfied SigmaF but not SigmaM, residual |Pu|*f",
+        "now": "the same DG 1 Sect. 3.4 quadratic the large-e branch uses, with Pu carried through signed: Y^2 - 2(f+N/2)Y + 2(Mu + Pu*f)/q_max = 0, T = q_max*Y - Pu. Writing it in (Mu + Pu*f) rather than Pu*(e+f) removes the singularity at Pu -> 0 that forced the split, since e = Mu/Pu is meaningless under uplift.",
+        "boundary": "when Mu*1000 <= |Pu|*f no bearing zone closes, every anchor stays in tension and T = |Pu|. Continuous at the transition (Mu = 26.25 kNm for Pu = -150, f = 175).",
+        "consequence_stated_plainly": "the fix makes Case D SMALLER and therefore LESS conservative: 378.571 -> 287.546, moving it from +23.7% above PROFIS to -6.0% below. Fixing an equilibrium error was still correct \u2014 the old number was conservative by accident, not by design, and it would have gone the other way on other geometries. But the uplift case governs a PEB base under wind, so this is a real reduction in a load case that matters and should be accepted knowingly.",
+        "what_it_does_not_fix": "defect #9a \u2014 the bearing width and lever arm question. After this fix ALL THREE cases read low against PROFIS (C -21.3%, D -6.0%, E -38.9%), one consistent direction, one remaining cause. That is the point of unifying the branches: when the bearing model is decided, one change fixes every case."
+      }
+    },
+    "E": {
+      "profis_input": {
+        "N": -500.0,
+        "Mx": 150.0,
+        "Vx": 60.0
+      },
+      "module_input": {
+        "Pu": 500.0,
+        "Mu": 150.0,
+        "Vu": 60.0
+      },
+      "purpose": "registered before the run as the most discriminating case available, and as the test of whether PROFIS's near-equal 306.481 / 306.032 for C and D was coincidence.",
+      "predictions_registered_before_the_run": {
+        "module_DG1_large_e": 168.7,
+        "flange_lever_arm": 243.0,
+        "saturation_check": "a third ~306 would mean something is saturating"
+      },
+      "predicted": 168.686,
+      "profis_rigid": 275.997,
+      "profis_rigid_per_anchor": [
+        137.962,
+        138.035
+      ],
+      "profis_cbfem": 336.214,
+      "unit": "kN",
+      "branch": "large e \u2014 DG 1 Sect. 3.4 quadratic",
+      "status": "DISAGREES \u2014 module is 38.9% LOW, i.e. UNCONSERVATIVE",
+      "delta_pct": -38.88,
+      "outcome": {
+        "saturation_ruled_out": "PROFIS returned 275.997, not a third ~306. The C/D near-equality was coincidence; nothing is saturating.",
+        "flange_model_REJECTED": "predicted 243.0 against an actual 275.997 = -12.0%. Having fitted C to +0.3% and D to +4.0%, it fails its first out-of-sample case. It was an over-fit to two points and is withdrawn as the explanation.",
+        "module_finding_STRENGTHENED": "the large-e branch is unconservative in both compression cases and the gap WIDENS with axial load: -21.3% at Pu 150, -38.9% at Pu 500."
+      },
+      "caveats_on_this_run": {
+        "profile_worst_yet": "plastic strain 538.17% against a 5.00% limit; equivalent stress 1394.30 MPa against fy 317.16. The run that killed the flange model is also the most grossly yielded of the three."
+      }
+    },
+    "E_HEB300": {
+      "purpose": "control run \u2014 identical to Case E in every respect except the profile, changed IPE 300 -> HEB 300 (same depth 300, tf 10.7 -> 19, tw 7.1 -> 11, bf 150 -> 300, ~3x section modulus). Registered beforehand as the test of whether the 382-538% plastic strain in the earlier runs was contaminating the equivalent-rigid extraction.",
+      "profis_input": {
+        "N": -500.0,
+        "Mx": 150.0,
+        "Vx": 60.0
+      },
+      "module_input": {
+        "Pu": 500.0,
+        "Mu": 150.0,
+        "Vu": 60.0
+      },
+      "predicted": 168.686,
+      "profis_rigid": 276.0,
+      "profis_rigid_per_anchor": [
+        138.0,
+        138.0
+      ],
+      "profis_cbfem": 295.9,
+      "profis_cbfem_per_anchor": [
+        147.4,
+        148.5
+      ],
+      "anchor_plate_plastic_strain": 0.0,
+      "anchor_plate_deformation_mm": 0.3,
+      "unit": "kN",
+      "status": "DISAGREES \u2014 module 38.9% LOW. Identical to the IPE 300 run.",
+      "delta_pct": -38.88,
+      "outcome": {
+        "plasticity_caveat_ELIMINATED": "rigid column 276.0 against 275.997 with the yielded IPE 300 \u2014 identical to three figures. The equivalent-rigid extraction is insensitive to the profile, which is what it claims to be. And this was tested on the WORST-strained of the three runs (538.17%), so the same conclusion carries to C (382.85%) and D (195.05%).",
+        "coherence_check_passed": "the CBFEM column DID move, 168.230/167.985 -> 147.4/148.5, while the rigid column did not. Exactly the right behaviour: CBFEM sees the profile's flexibility, the rigid idealisation does not. Had both moved, or neither, the columns would not be what the report says they are.",
+        "rigidity_caveat_ELIMINATED": "anchor plate plastic strain 0%, max deformation 0.3 mm. The plate is elastic and essentially rigid, so PROFIS's Sect. 2.7 'may not behave rigid' warning no longer applies to this run."
+      }
+    }
+  },
+  "candidate_defect_9": {
+    "title": "9a: bearing resultant sits too far out (OPEN). 9b: uplift branch failed moment equilibrium (FIXED).",
+    "found_by": "PROFIS Cases C, D and E, 2026-08-30",
+    "status": "9b fixed. 9a open \u2014 confirmed, sized, no replacement model. All three cases now err in the SAME direction.",
+    "what_is_established": {
+      "large_e_branch_is_unconservative": "two independent compression cases, same direction, monotone in Pu: C (Pu 150, Mu 120) -21.3%; E (Pu 500, Mu 150) -38.9%.",
+      "uplift_branch_fails_moment_equilibrium": "FIXED 2026-08-30. T = |Pu| + Mu/(2f) implied sum(M) = Mu + Pu*f. Replaced by the signed DG 1 quadratic, unifying the branches. Case D moved from +23.7% to -6.0%.",
+      "compression_resultant_sits_too_far_out": "PROFIS's rigid lever arm tracks its own CBFEM closely and MOVES with the load \u2014 169.5 mm under uplift 150, 145.4 under compression 150, 131.1 under compression 500, i.e. inward as compression grows. The module's DG 1 block sits 35-50 mm further out in every case (198.8 / n.a. / 180.2).",
+      "magnitude_now_trustworthy": "the HEB 300 control returned 276.0 against the yielded IPE 300 run's 275.997. The equivalent-rigid extraction does not see the profile, so the recorded deltas stand at full size: C -21.3%, D +23.7%, E -38.9%."
+    },
+    "what_is_NOT_established": {
+      "any_replacement_model": "the flange lever arm fitted C and D within 4% and missed E by -12%. A plate-edge block with a fixed effective width needs B_eff = 173 / 85 / 249 mm across the three cases \u2014 also not constant. Neither survives three points. Do not adopt either. A one-parameter elastic rigid-plate model on a Winkler bed was also tried and did not fit any of the three. Three candidate models, none survived. Stop reverse-engineering PROFIS."
+    },
+    "next_step": {
+      "priority": "STOP running PROFIS cases. The comparison has given all it can: the disagreement is real, confirmed, and sized. What is missing is not another PROFIS point but a THIRD source.",
+      "why": "every measurement so far is module-vs-PROFIS. That establishes they differ; it cannot say which is wrong. The gap GROWING with axial load (-21.3% at Pu 150, -38.9% at Pu 500) is the kind of signature a subtle misapplication produces, so the module has not been cleared of one.",
+      "run": "work AISC DG 1 2nd ed.'s own large-moment design example through the module by hand. No GUI needed \u2014 just the Design Guide. If the module reproduces DG 1's worked example, then DG 1 and PROFIS genuinely differ and this is a method choice. If it does not, there is a bug in the module and the method debate was premature.",
+      "bonus": "the same DG 1 worked example also exercises the bearing, thickness and lambda relations, so one source can close baseplate.bearing, baseplate.thickness and baseplate.lambda as well \u2014 three of the four open base plate flags."
+    },
+    "why_not_fixed_here": "the large-e branch implements AISC DG 1 Sect. 3.4 correctly and no validated replacement has survived testing. The uplift branch is a separate matter \u2014 its moment-equilibrium failure is provable without PROFIS and should be fixed regardless, but the fix depends on which bearing model the project adopts, so it waits on the same decision.",
+    "decision_deferred_until": "the DG 1 worked example. The uplift branch's moment-equilibrium failure is independent of all this and can be fixed now."
+  },
+  "flags_this_can_close": {
+    "baseplate.eccentricity": "NOT closed. Three runs, three disagreements. The runs did their job."
+  },
+  "flags_this_cannot_close": {
+    "baseplate.bearing": "AISC J8, computed library-side in pyaisc360. PROFIS does not expose a comparable number.",
+    "baseplate.thickness": "DG 1 cantilever method. PROFIS uses CBFEM \u2014 not comparable. Needs an AISC base-plate calculator or a hand check.",
+    "baseplate.lambda": "same as thickness."
+  }
+}

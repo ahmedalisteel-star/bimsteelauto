@@ -1,0 +1,127 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 07, B1_C1, 2026-08-31",
+  "settings": "AISC 15th / LRFD",
+  "recorded": "2026-08-31",
+  "status": "complete \u2014 inputs and outputs both recorded, run is reproducible",
+  "inputs": {
+    "beam": "W18X50, A992 (tw 0.355)",
+    "column": "W14X90, A992, to the column flange",
+    "plate": "PL 3/8 x 3-1/2 x 1'-0, A992 (Fy 50, Fu 65 ksi), CONVENTIONAL configuration",
+    "t_cleat": 0.375,
+    "h_cleat": 12.0,
+    "bolts": "3 rows, 3/4 in A325N, standard holes (dh 0.8125), single shear",
+    "n_bolts": 3,
+    "d_bolt": 0.75,
+    "d_hole": 0.8125,
+    "row_spacing_pitch": 5.0,
+    "edge_end_vertical": 1.0,
+    "edge_side_horizontal_leh": 1.5,
+    "weld": "double fillet 1/4 in, 12 in, E70",
+    "V_kips": 30.0,
+    "M": 0.0,
+    "N": 0.0,
+    "units": "imperial",
+    "eccentricity_bolt_line_to_weld_line": 2.0
+  },
+  "comparison": {
+    "bolt shear (J3.6)": {
+      "module": 46.03,
+      "cet": 51.12,
+      "delta_pct": -10.0
+    },
+    "bearing/tearout - cleat (J3.10)": {
+      "module": 67.88,
+      "cet": 75.08,
+      "delta_pct": -9.6
+    },
+    "block shear - cleat (J4.3)": {
+      "module": 112.38,
+      "cet": 112.2,
+      "delta_pct": 0.2
+    },
+    "shear yield/rupture (J4.2)": {
+      "module": 103.24,
+      "cet": 102.8,
+      "delta_pct": 0.4
+    }
+  },
+  "every_difference_is_explained_to_the_digit": {
+    "A_defect_15_FIXED": {
+      "title": "net areas used the bare hole, not dh + 1/16 (AISC B4.3b)",
+      "evidence": "plate shear rupture: module read 104.89 kips; with the 1/16 in damage allowance the hand calc gives 102.83; CET printed 102.80.",
+      "direction": "UNCONSERVATIVE, ~2% on every rupture and block-shear capacity",
+      "applies_to": "NET areas only \u2014 bearing and tearout correctly use the actual hole for the clear distance lc",
+      "after_fix": "shear rupture +2.5% -> +0.4%, block shear +0.7% -> +0.2%. The residual 0.4% is the module's A992 table (450 MPa) against the exact 448.2 MPa \u2014 table rounding, not a formula error.",
+      "status": "FIXED"
+    },
+    "B_defect_12_broader_than_thought": {
+      "title": "no bolt-group eccentricity coefficient C \u2014 and it affects BEARING as well as bolt shear",
+      "evidence": "module's summed bearing 78.84 kips x C/n (2.857/3 = 0.9523) = 75.08, which is CET's number exactly. The same C explains bolt shear: 53.67 x 0.9523 = 51.12.",
+      "severity_depends_on_configuration": {
+        "conventional (this run, 3 bolts)": {
+          "C_over_n": 0.952,
+          "module_error_pct": 5.0
+        },
+        "extended (AISC II.A-17B, 5 bolts)": {
+          "C_over_n": 0.612,
+          "module_error_pct": 63.4
+        }
+      },
+      "status": "OPEN \u2014 needs a design decision, not a code fix"
+    },
+    "C_scope_not_a_defect": {
+      "title": "the module assumes the supported member has a CUT END",
+      "evidence": "treating all three bolts as inner (no end bolt) gives 93.45 kips; x C/n = 89.00 = CET exactly.",
+      "why": "correct for a purlin, which is cut. WRONG for a continuous beam web, where there is no end bolt. The two errors partly cancel here (74.94 vs 89.00).",
+      "status": "warned, not changed \u2014 the function is check_purlin_cleat and a purlin does have a cut end"
+    }
+  },
+  "what_this_establishes": "the J3.6, J3.10, J4.2 and J4.3 machinery reproduces CET to within table rounding once the two modelling differences are accounted for. The equations are right; a feature is missing.",
+  "flag_decision": {
+    "secondary.cleat": "FLIPPED TO TRUE 2026-08-31",
+    "basis": [
+      "the two limit states with no eccentricity in them \u2014 block shear and shear yield/rupture \u2014 reproduce CET to 0.2% and 0.4%, which is the module's A992 grade-table rounding (450 vs 448.2 MPa), not a formula difference",
+      "the two that do \u2014 bolt shear and bearing \u2014 are now CONSERVATIVE by 10.0% and 9.6%, by a documented and deliberate choice of the elastic method over instantaneous-centre",
+      "defect #15 (the B4.3b net-area allowance) was found and fixed by this run",
+      "eccentricity can no longer be silently omitted; it is a required argument"
+    ],
+    "residual_limitations": [
+      "the module has NO flexural yielding/rupture check for the plate (CET: 303.8 / 247.3 kips) and NO weld check (CET: 131.6 kips). Neither governed here, but both would on a deeper or thinner plate. These are COVERAGE gaps, not wrong answers \u2014 the flag covers the relations present, and their absence is now the first thing to add.",
+      "one geometry, one bolt count, one configuration. The elastic coefficient was checked at n = 3 only.",
+      "the supported member is assumed to have a cut end (correct for a purlin, wrong for a continuous beam web) \u2014 warned, not enforced."
+    ]
+  },
+  "coverage_gaps_not_errors": [
+    "the module has no flexural yielding/rupture check for the plate (CET: 303.8 / 247.3 kips)",
+    "the module has no weld check for the cleat (CET: 131.6 kips)",
+    "neither governed here, but both would on a deeper or thinner plate"
+  ],
+  "defect_12_resolution": {
+    "decision": "ELASTIC (vector) method implemented 2026-08-31",
+    "why_not_the_instantaneous_centre_method": "AISC Manual Table 7-7's IC coefficients are what CET and the AISC design examples use, but they are tabulated and need the Manual for every layout. The elastic method is closed-form, needs no tables, and is ALWAYS conservative against IC because it ignores the group's ability to redistribute.",
+    "formula": "C = 1 / sqrt((1/n)^2 + (e*y_max/SUM y^2)^2), with SUM y^2 = p^2*n(n^2-1)/12 and y_max = (n-1)p/2",
+    "measured_on_this_run": {
+      "n": 3,
+      "pitch_in": 5.0,
+      "e_in": 2.0,
+      "C_elastic": 2.5725,
+      "C_instantaneous_centre_CET": 2.857,
+      "conservative_by_pct": 10.0
+    },
+    "applied_to": "bolt shear AND bearing/tearout \u2014 CET's numbers are reproduced only when C acts on both",
+    "api_change": "eccentricity is now a REQUIRED argument. It does not default to zero, because a silent zero is exactly what caused defect #12. Pass eccentricity=0.0 to state that the group is concentric.",
+    "result": {
+      "before": {
+        "bolt shear": 5.0,
+        "bearing - cleat": 5.4,
+        "direction": "UNCONSERVATIVE"
+      },
+      "after": {
+        "bolt shear": -10.0,
+        "bearing - cleat": -9.6,
+        "direction": "CONSERVATIVE"
+      }
+    }
+  }
+}

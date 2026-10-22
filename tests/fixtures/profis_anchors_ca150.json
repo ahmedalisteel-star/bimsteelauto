@@ -1,0 +1,42 @@
+{
+  "source": "Hilti PROFIS Engineering 3.1.34",
+  "report": "ca150 hef450 side blowout",
+  "design_method": "ACI31819_CIP",
+  "recorded": "2026-08-30",
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+  "note": "Same anchor as the ca450 model, edges pulled in to 150 mm so hef 450 > 2.5*ca = 375 and Eq. 17.6.4 engages. This run exposed defects #6 (alpha_group missing) and #7 (blowout checked against the whole group load).",
+
+  "inputs": {
+    "anchor": "1-1/4\" ASTM F1554 Gr.36 heavy hex head, cast-in",
+    "d": 31.75,
+    "hef": 450.0,
+    "n_x": 2,
+    "n_y": 2,
+    "s_x": 350.0,
+    "s_y": 350.0,
+    "ca_x1": 150.0,
+    "ca_x2": 150.0,
+    "ca_y1": 150.0,
+    "ca_y2": 150.0,
+    "cracked": true,
+    "supplementary_reinforcement": false,
+    "ha": 800.0,
+    "grade": "F1554-36",
+    "fc_prime": 30.0,
+    "Nua": 364.096,
+    "Vua": 60.0
+  },
+
+  "derived": {
+    "alpha_group": {"profis": 1.389, "tol_pct": 0.10,
+                    "why": "Eq. 17.6.4.2 group factor — was missing entirely (defect #6)"}
+  },
+
+  "modes": {
+    "17.6.2 concrete breakout":   {"profis": 160.11, "mine": 159.49, "tol_pct": 0.50},
+    "17.6.4 side-face blowout":   {"profis": 403.15, "mine": 394.47, "tol_pct": 2.50,
+                                   "known_gap": "ACI 318M-19 Eq. 17.6.4.1 SI constant 13 vs imperial 160 (exact SI 13.29). ~2.15% conservative, by design."},
+    "17.7.2 concrete breakout":   {"profis":  34.35, "mine":  33.88, "tol_pct": 1.50},
+    "17.7.3 concrete pryout":     {"profis": 320.38, "mine": 318.99, "tol_pct": 0.50}
+  }
+}

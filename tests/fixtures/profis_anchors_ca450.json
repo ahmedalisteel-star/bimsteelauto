@@ -1,0 +1,46 @@
+{
+  "source": "Hilti PROFIS Engineering 3.1.34",
+  "report": "Concrete - Aug 30, 2026",
+  "design_method": "ACI31819_CIP",
+  "recorded": "2026-08-30",
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+  "note": "This is the model behind anchors.VERIFIED. Every input needed to re-run it is here, which is what makes it a verification fixture rather than a regression fixture.",
+
+  "inputs": {
+    "anchor": "1-1/4\" ASTM F1554 Gr.36 heavy hex head, cast-in",
+    "d": 31.75,
+    "hef": 450.0,
+    "n_x": 2,
+    "n_y": 2,
+    "s_x": 350.0,
+    "s_y": 350.0,
+    "ca_x1": 450.0,
+    "ca_x2": 450.0,
+    "ca_y1": 450.0,
+    "ca_y2": 450.0,
+    "cracked": true,
+    "supplementary_reinforcement": false,
+    "ha": 800.0,
+    "grade": "F1554-36",
+    "fc_prime": 30.0,
+    "Nua": 364.096,
+    "Vua": 60.0
+  },
+
+  "derived": {
+    "hef_effective": {"profis": 300.0, "tol_pct": 0.0,
+                      "why": "ACI 17.6.2.1.2 substitute hef' — four edges inside 1.5hef"},
+    "Ase":  {"profis": 625.0, "tol_pct": 0.05,
+             "why": "PROFIS prints Ase = 625; UNC tensile stress area, NOT the 806.5 shank"}
+  },
+
+  "modes": {
+    "17.6.1 steel strength":      {"profis": 750.00, "mine": 750.24, "tol_pct": 0.10},
+    "17.6.2 concrete breakout":   {"profis": 388.24, "mine": 387.79, "tol_pct": 0.20},
+    "17.6.3 pullout":             {"profis": 969.84, "mine": 969.77, "tol_pct": 0.05},
+    "17.7.1 steel strength":      {"profis": 390.00, "mine": 390.12, "tol_pct": 0.10},
+    "17.7.2 concrete breakout":   {"profis": 114.72, "mine": 112.85, "tol_pct": 2.00,
+                                   "known_gap": "ACI 318M-19 Eq. 17.7.2.2.1b SI constant 3.7 vs imperial 9 (exact SI 3.766). PROFIS computes imperial. ~1.8% conservative here, by design, not an error."},
+    "17.7.3 concrete pryout":     {"profis": 776.63, "mine": 775.57, "tol_pct": 0.20}
+  }
+}

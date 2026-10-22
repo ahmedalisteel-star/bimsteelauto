@@ -1,0 +1,205 @@
+{
+  "source": "Struware CS2024, Ver 2024-03-08 (www.struware.com) - a commercial wind-load program, an implementation of ASCE 7-16 written by a third party",
+  "report": "Struware published example calculation set, 'Wind Loads - MWFRS h<=60' (Low-rise Buildings)', sheet 7 of 34",
+  "url": "https://www.struware.com/examples/Calculations.pdf",
+  "local_copy": "tests/fixtures/struware_asce716_calculations.pdf",
+  "basis": "Wind Loads : ASCE 7-16, IBC 2021. The edition is PRINTED ON THE SHEET, which is what closes the 7-10 vs 7-16 open item the handover raised.",
+  "recorded": "2026-09-02",
+  "status": "complete - every input and every printed output is captured, the run is reproducible from this file alone",
+  "why_this_run": "The published worked example already in the handover is ASCE 7-10 at theta = 26.57 deg. It pins the 20 and 30 degree rows of the Fig. 28.3-1 table but says nothing about the 0-5 degree row - which is the ONLY row a PEB ever uses (a 1:10 roof is 5.7 deg, a 0.5:12 roof is 2.4 deg). This run is at theta = 1.2 deg and prints the whole table, both load cases, both signs of internal pressure.",
+  "inputs": {
+    "code": "ASCE 7-16",
+    "V_ultimate_mph": 120.0,
+    "V_nominal_mph": 93.0,
+    "risk_category": "II",
+    "exposure": "C",
+    "enclosure": "Enclosed Building",
+    "GCpi": [
+      0.18,
+      -0.18
+    ],
+    "Kd": 0.85,
+    "Kzt": 1.0,
+    "Ke": 1.0,
+    "ground_elevation_ft": 0.0,
+    "roof_angle_deg": 1.2,
+    "roof_pitch": "0.25 / 12",
+    "roof_type": "Monoslope",
+    "building_length_ft": 300.0,
+    "least_width_ft": 175.0,
+    "mean_roof_height_ft": 62.0
+  },
+  "printed_outputs": {
+    "Kz_eq_Kh": 1.144,
+    "qh_psf": 35.9,
+    "edge_strip_a_ft": 17.5,
+    "end_zone_2a_ft": 35.0,
+    "zone_2_length_ft": 87.5,
+    "note_on_a": "least horizontal dimension 175 ft -> 0.1 x 175 = 17.5 ft; 0.4h = 0.4 x 62 = 24.8 ft; the SMALLER is 17.5. Floor 0.04 x 175 = 7.0 ft and 3 ft, neither binds. This exercises the 'smaller of' branch with 0.1B governing.",
+    "note_on_zone_2_length": "87.5 ft = 175/2 - the zone 2/3 boundary sits at the ridge, i.e. mid-width.",
+    "GCpf_case_A": {
+      "1": 0.4,
+      "2": -0.69,
+      "3": -0.37,
+      "4": -0.29,
+      "1E": 0.61,
+      "2E": -1.07,
+      "3E": -0.53,
+      "4E": -0.43
+    },
+    "GCpf_case_B": {
+      "1": -0.45,
+      "2": -0.69,
+      "3": -0.37,
+      "4": -0.45,
+      "5": 0.4,
+      "6": -0.29,
+      "1E": -0.48,
+      "2E": -1.07,
+      "3E": -0.53,
+      "4E": -0.48,
+      "5E": 0.61,
+      "6E": -0.43
+    },
+    "case_A_with_minus_GCpi": {
+      "1": 0.58,
+      "2": -0.51,
+      "3": -0.19,
+      "4": -0.11,
+      "1E": 0.79,
+      "2E": -0.89,
+      "3E": -0.35,
+      "4E": -0.25
+    },
+    "case_A_with_plus_GCpi": {
+      "1": 0.22,
+      "2": -0.87,
+      "3": -0.55,
+      "4": -0.47,
+      "1E": 0.43,
+      "2E": -1.25,
+      "3E": -0.71,
+      "4E": -0.61
+    },
+    "case_B_with_minus_GCpi": {
+      "1": -0.27,
+      "2": -0.51,
+      "3": -0.19,
+      "4": -0.27,
+      "5": 0.58,
+      "6": -0.11,
+      "1E": -0.3,
+      "2E": -0.89,
+      "3E": -0.35,
+      "4E": -0.3,
+      "5E": 0.79,
+      "6E": -0.25
+    },
+    "case_B_with_plus_GCpi": {
+      "1": -0.63,
+      "2": -0.87,
+      "3": -0.55,
+      "4": -0.63,
+      "5": 0.22,
+      "6": -0.47,
+      "1E": -0.66,
+      "2E": -1.25,
+      "3E": -0.71,
+      "4E": -0.66,
+      "5E": 0.43,
+      "6E": -0.61
+    },
+    "ultimate_surface_pressures_psf": {
+      "comment": "columns are Case A (-GCpi, +GCpi) then Case B (-GCpi, +GCpi)",
+      "1": [
+        20.8,
+        7.9,
+        -9.7,
+        -22.6
+      ],
+      "2": [
+        -18.3,
+        -31.2,
+        -18.3,
+        -31.2
+      ],
+      "3": [
+        -6.8,
+        -19.7,
+        -6.8,
+        -19.7
+      ],
+      "4": [
+        -3.9,
+        -16.9,
+        -9.7,
+        -22.6
+      ],
+      "5": [
+        20.8,
+        7.9
+      ],
+      "6": [
+        -3.9,
+        -16.9
+      ],
+      "1E": [
+        28.3,
+        15.4,
+        -10.8,
+        -23.7
+      ],
+      "2E": [
+        -31.9,
+        -44.8,
+        -31.9,
+        -44.8
+      ],
+      "3E": [
+        -12.6,
+        -25.5,
+        -12.6,
+        -25.5
+      ],
+      "4E": [
+        -9.0,
+        -21.9,
+        -10.8,
+        -23.7
+      ],
+      "5E": [
+        28.3,
+        15.4
+      ],
+      "6E": [
+        -9.0,
+        -21.9
+      ]
+    },
+    "minimum_load_note_printed_by_struware": "The code requires the MWFRS be designed for a min ultimate force of 16 psf multiplied by the wall area plus an 8 psf force applied to the vertical projection of the roof.",
+    "why_that_note_is_recorded": "It is ASCE 7-16 Sect. 28.3.4, and this package does NOT apply it. Recorded here so the coverage gap declared in loads/wind.py has a citation behind it rather than a memory.",
+    "horizontal_mwfrs_simple_diaphragm_psf": {
+      "comment": "Struware's 'Horizontal MWFRS Simple Diaphragm Pressures', transverse direction. These are the NET across-the-frame pressures - windward zone minus leeward zone - in which the internal pressure cancels. They are exactly the quantity the Sect. 28.3.4 minimum is compared against.",
+      "interior_zone_wall": 24.7,
+      "interior_zone_roof": -11.5,
+      "end_zone_wall": 37.3,
+      "end_zone_roof": -19.4,
+      "how_to_reproduce": "wall = qh (GCpf_1 - GCpf_4); roof = qh (GCpf_2 - GCpf_3). With qh = 35.858 psf: 35.858*(0.40+0.29) = 24.74; 35.858*(-0.69+0.37) = -11.47; 35.858*(0.61+0.43) = 37.29; 35.858*(-1.07+0.53) = -19.36.",
+      "negative_control_for_the_minimum": "24.7 psf > 16 psf and |-11.5| psf > 8 psf, so Sect. 28.3.4 does NOT govern this building. A minimum-load check that reported 'governs' here would be wrong, and that is what makes this a control rather than only a confirmation."
+    }
+  },
+  "flags_this_can_close": [
+    "wind.gcpf_table - all 8 Load Case A values at theta <= 5 deg and all 12 Load Case B values, exact",
+    "wind.velocity_pressure - Kz 1.144 at 62 ft Exposure C, and qh 35.9 psf",
+    "wind.internal_pressure_sign - 20 zone/case pairs printed with BOTH signs of GCpi, so p = qh(GCpf - GCpi) is confirmed term by term and in the direction that governs uplift",
+    "wind.end_zone_width - the 'smaller of' branch, with 0.1B governing",
+    "wind.minimum_design_load - the four printed simple-diaphragm net pressures reproduce net_horizontal_pressures exactly, Struware prints the Sect. 28.3.4 rule text verbatim, and its building is a NEGATIVE control in which the minimum does not govern"
+  ],
+  "flags_this_cannot_close": [
+    "wind.angle_interpolation - this run is a single angle in the flat band, so it exercises no interpolation at all. Closed instead by the theta = 26.57 deg worked example."
+  ],
+  "what_this_run_does_NOT_cover": [
+    "The 20, 30, 45 and 90 degree rows of Fig. 28.3-1 are not printed here. See the VERIFIED block in loads/wind.py for what each of those rows does rest on.",
+    "Torsional load cases, parapet and overhang pressures: Struware prints parapet numbers, this package does not compute them. Declared as coverage gaps."
+  ]
+}

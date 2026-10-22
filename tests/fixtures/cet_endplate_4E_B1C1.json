@@ -1,0 +1,37 @@
+{
+  "source": "CET.SteelConnDesign",
+  "report": "B1_C1",
+  "basis": "AISC Design Guide 4 Eq. 3.10 (CET follows DG 4, not 358)",
+  "recorded": "2026-08-29",
+
+  "status": "INCOMPLETE — outputs recorded, inputs NOT recorded",
+  "blocking": [
+    "g (bolt gage)", "pfo", "pfi", "h_rows (h0, h1)", "de",
+    "Mu and Fy used for tp_req / db_req", "bolt grade"
+  ],
+  "why_this_matters": "endplate.VERIFIED['4E'] is True on the strength of this report, and the report's four output numbers are recorded below. But the geometry that produced them is not, so the run cannot be re-executed. Until the inputs are supplied this can only be a REGRESSION fixture pinning the module's own current output — and asserting the module against its own output while labelling the result 'verified against CET' is exactly the circular check HANDOVER section 7 forbids. The tests that consume this file therefore SKIP, loudly, rather than pass.",
+
+  "known_inputs": {
+    "beam": "W27x94",
+    "column": "W18x60",
+    "connection": "beam to column flange",
+    "plate": "PL 1/4 x 9.84",
+    "material": "A992",
+    "units": "imperial, as CET printed them"
+  },
+
+  "recovery_attempted": {
+    "result": "failed — underdetermined",
+    "detail": "s = 0.5*sqrt(bp*g) with bp = 9.84 in inverts to g = 3.500 in, but Yp = 352.17 then still leaves pfo, pfi, h0 and h1 free (four unknowns, one equation). tp_req and db_req add Mu and Fy as further unknowns. Six unknowns, four recorded outputs — no unique solution, unlike the base plate model which was recoverable because the anchor record pinned f independently."
+  },
+
+  "outputs": {
+    "s":      {"cet": 2.9343, "mine": 2.9343, "unit": "in", "tol_pct": 0.02},
+    "Yp":     {"cet": 352.2,  "mine": 352.17, "unit": "in", "tol_pct": 0.02},
+    "tp_req": {"cet": 0.3895, "mine": 0.3895, "unit": "in", "tol_pct": 0.02},
+    "db_req": {"cet": 0.6317, "mine": 0.6317, "unit": "in", "tol_pct": 0.02}
+  },
+
+  "formula_confirmed_by_report": "Yp = (bp/2)[h1(1/pfi + 1/s) + h0(1/pfo) - 1/2] + (2/g)[h1(pfi + s)]",
+  "defect_found": "The 1/s term and the -1/2 were both absent before this run (defect #1). CET printed the expression in full, which is what exposed it. test_defect_regressions.py asserts both terms are still present — that test does NOT depend on the missing inputs and runs normally."
+}

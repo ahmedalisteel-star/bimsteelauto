@@ -1,0 +1,86 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 02, B1_C1, 2026-08-31",
+  "basis": "AISC Design Guide 4",
+  "settings": "Design Code AISC 15th, Shape Database AISC 15th, Design Method LRFD",
+  "recorded": "2026-08-31",
+
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+  "role": "RUN 2 — the independent verification of the defect #10 fix. Run 1 (cet_endplate_4E_W24x76) SUPPLIED the corrected 4ES formula; checking the fix against that run would be circular. This is a different geometry, and the module's prediction was computed and recorded BEFORE CET's answer was read.",
+
+  "inputs": {
+    "beam": "W30X90, A992 (d 29.5, tf 0.61)",
+    "column": "W18X60, A992, connection to the column FLANGE",
+    "end_plate": "PL 5/8 x 10-1/2 x 2'-10-7/8, A992, Fy 50 ksi",
+    "config": "4ES — four bolts, stiffened",
+    "bp": 10.5,
+    "g": 3.5,
+    "pfo": 1.4375,
+    "pfi": 1.4375,
+    "de": 1.25,
+    "h0": 30.6325,
+    "h1": 27.1475,
+    "tp": 0.625,
+    "Fy_plate_ksi": 50.0,
+    "bolts": "1 in dia A325N, standard holes, bearing",
+    "Ft_ksi": 90.0,
+    "Mu_kipin": 4800.0,
+    "V_kips": 50.0,
+    "N_kips": 0.0,
+    "units": "imperial"
+  },
+
+  "what_changed_from_run_1": {
+    "beam": "W24X76 -> W30X90",
+    "bp": "9.0 -> 10.5",
+    "h0": "24.9975 -> 30.6325",
+    "h1": "21.4425 -> 27.1475",
+    "s": "2.80624 -> 3.03109",
+    "tp": "0.75 -> 0.625",
+    "unchanged": "g 3.5, pfo/pfi 1.4375, de 1.25 — CET's defaults in both runs",
+    "why_this_is_enough": "the two terms corrected in defect #10 are (bp/2)*h1*(1/s) and (bp/2)*h0*(1/(2s)). ALL FOUR of bp, h1, h0 and s changed between the runs, so both corrected terms are exercised at genuinely different values. The unchanged parameters (g, pfo, pfi, de) appear only in the (2/g) bracket, which was never in doubt and which the printed expression confirms directly."
+  },
+
+  "prediction_registered_before_reading_cet": {
+    "de_1.25": 400.935,
+    "de_1.4375": 404.217,
+    "de_1.5": 405.311,
+    "de_2.0": 414.064,
+    "method": "the report's input block was read first, the module run across the plausible de range and the results printed, and only then was CET's Yp line opened. de = 1.25 was CET's choice."
+  },
+
+  "formula_printed_by_cet":
+    "Yp = (bp/2)[h1(1/pfi + 1/s) + h0(1/pfo + 1/(2s))] + (2/g)[h1(pfi + s) + h0(de + pfo)]",
+  "formula_note": "identical to the expression printed on run 1, on different geometry. Two independent printings of the same term structure.",
+
+  "outputs": {
+    "s":      {"cet": 3.03109, "mine": 3.03109, "unit": "in", "tol_pct": 0.02},
+    "Mnp":    {"cet": 8168.46, "mine": 8168.46, "unit": "kip-in", "tol_pct": 0.02},
+    "Yp":     {"cet": 400.935, "mine": 400.935, "unit": "in", "tol_pct": 0.02},
+    "tp_req": {"cet": 0.6139,  "mine": 0.6139,  "unit": "in", "tol_pct": 0.02},
+    "db_req": {"cet": 0.8852,  "mine": 0.8852,  "unit": "in", "tol_pct": 0.02}
+  },
+
+  "agreement": "all five within 0.005%",
+
+  "flag_decision": {
+    "endplate.4ES": "FLIPPED TO TRUE 2026-08-31",
+    "basis": [
+      "the expression was printed in full by CET on TWO different geometries and is identical both times",
+      "the module reproduces it term for term after the defect #10 fix",
+      "the prediction was registered before CET's answer was read, and matched to 0.0001%",
+      "the fix came from run 1; this is run 2 and is independent of it",
+      "all four quantities appearing in the two corrected terms changed between runs"
+    ],
+    "residual_limitations_recorded_honestly": [
+      "g, pfo, pfi and de were CET's defaults in both runs and did not vary. They appear only in terms that were already correct.",
+      "the module caps de at s (de = min(geom.de, s)). CET's de = 1.25 is well below s in both runs, so the cap itself is UNTESTED. CET does print 's > pfi', so it evidently carries the same comparison for pfi, but that is inference, not measurement.",
+      "both runs used 1 in A325N bolts, Fy 50 ksi plate and Mu 4800 kip-in. Materials and load were not varied — though Yp is purely geometric, so this does not bear on the yield-line parameter."
+    ],
+    "reversible": "this is a judgement that the evidence meets the bar the anchors module was held to (recorded model, matched numbers) and exceeds it by adding a printed formula. If Ahmed disagrees, set VERIFIED['4ES'] = False and the gate closes again."
+  },
+
+  "still_open": {
+    "endplate.8ES": "untouched and now SUSPECT BY ASSOCIATION — same author, same family, and the only config with no independent check. Its bp/2 bracket reads h1(1/(2de)) + h2(1/pfo) + h3(1/pfi) + h4(1/s), which has s-terms but a different structure again. Both 4E and 4ES turned out to have terms nobody predicted. Run it."
+  }
+}

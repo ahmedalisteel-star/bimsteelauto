@@ -1,0 +1,233 @@
+"""
+BIMSteelAuto.FCMacro - the button.
+
+Reads the engine's ``design_result.json`` and builds the whole thing inside
+FreeCAD: the BIM model, the IFC, the MTO, and the 2D drawings.
+
+Install
+-------
+Copy this file into your FreeCAD macro folder, then run it from
+Macro -> Macros...  On this PC:
+
+    %APPDATA%\\FreeCAD\\Macro\\
+
+Nothing else needs installing.  The adapter imports only pure-Python parts
+of the engine, so FreeCAD does NOT need PyNite, pyaisc360 or the cfs
+library - those belong to the engine, which runs separately and leaves its
+answer in the JSON.
+
+What it does
+------------
+1. asks for ``design_result.json`` (remembers the last one)
+2. builds the model, schedule, IFC and drawings into an ``out`` folder
+   beside the JSON
+3. opens the model and tells you whether the DESIGN behind it is issuable
+
+If the design is NOT FOR ISSUE, the macro says so in red and every drawing
+it wrote carries the same stamp.  That is deliberate and cannot be turned
+off from here.
+"""
+
+import os
+import sys
+import traceback
+
+import FreeCAD as App
+
+try:
+    import FreeCADGui as Gui
+    from PySide import QtCore, QtGui, QtWidgets
+    HAVE_GUI = True
+except Exception:                                        # noqa: BLE001
+    HAVE_GUI = False
+
+_PARAM = "User parameter:BaseApp/Preferences/Mod/BIMSteelAuto"
+
+
+def _find_peb() -> str:
+    """Locate the package without this file needing to be edited.
+
+    Tried in order: the saved preference (the workbench's Settings button
+    writes the same one), the installed workbench's sibling folder, then
+    this PC's usual location.  If none resolve, the macro asks once and
+    remembers the answer - so moving to another PC costs a folder pick,
+    not a code edit.
+    """
+    candidates = [App.ParamGet(_PARAM).GetString("PebRoot", "")]
+
+    wb = os.path.join(App.getUserAppDataDir(), "Mod", "BIMSteelAutoWB")
+    if os.path.isdir(wb):
+        real = os.path.dirname(os.path.realpath(wb))
+        candidates.append(real)                          # repo layout
+        candidates.append(os.path.join(real, "peb"))     # peb sibling
+
+    candidates.append(
+        r"<your-folder>\bimsteelauto"
+    )
+    for c in candidates:
+        if c and os.path.isdir(os.path.join(c, "bimsteelauto_fc")):
+            return c
+    return ""
+
+
+PEB_ROOT = _find_peb()
+
+
+def _remembered() -> str:
+    grp = App.ParamGet(_PARAM)
+    return grp.GetString(
+        "LastJson", os.path.join(PEB_ROOT or "", "design_result.json")
+    )
+
+
+def _remember(path: str) -> None:
+    App.ParamGet(_PARAM).SetString("LastJson", path)
+
+
+def _ask_for_json() -> str:
+    start = _remembered()
+    if not HAVE_GUI:
+        return start
+    path, _ = QtWidgets.QFileDialog.getOpenFileName(
+        None, "BIMSteelAuto - pick the engine's design_result.json",
+        start, "Design result (*.json);;All files (*)",
+    )
+    return path
+
+
+def _report(run, out_dir: str) -> str:
+    r = run.result
+    ready = r.ready_for_issue()
+    lines = [
+        f"<h3>{r.spec.project_name}</h3>",
+        f"<p><b>Job</b> {r.spec.job_number}</p>",
+    ]
+    if ready:
+        lines.append(
+            "<p style='color:#1d6b3f'><b>READY FOR ISSUE</b></p>"
+        )
+    else:
+        lines.append("<p style='color:#a3121f'><b>NOT FOR ISSUE</b></p><ul>")
+        for b in r.issue_blockers()[:8]:
+            lines.append(f"<li>{b}</li>")
+        lines.append("</ul>")
+
+    from bimsteelauto_fc.schedule import schedule_totals
+
+    t = schedule_totals(run.schedule)
+    g = r.spec.geometry
+    plan = g.width * g.length * 1e-6
+    lines += [
+        "<p><b>Model</b><br>",
+        f"{run.build.n_built} members, {t['total_kg']:,.0f} kg "
+        f"({t['total_kg'] / plan:,.1f} kg/m&sup2; of plan)<br>",
+        f"main {t['main_kg']:,.0f} kg, secondary {t['secondary_kg']:,.0f} kg"
+        "</p>",
+        "<p><b>Written to</b><br>" + out_dir.replace("\\", "\\\\") + "</p>",
+        "<ul>",
+        f"<li>{os.path.basename(run.document_path)} - the model</li>"
+        if run.document_path else "",
+        f"<li>{os.path.basename(run.ifc.path)} - IFC4, "
+        f"{run.ifc.n_elements} elements</li>" if run.ifc else "",
+        "<li>schedule.csv - the MTO</li>",
+        f"<li>{len(run.ga.sheets) if run.ga else 0} general arrangement "
+        "sheets (SVG)</li>",
+        f"<li>{len(run.parts.sheets) if run.parts else 0} single-part "
+        "drawings (SVG)</li>",
+        f"<li>{len(run.dxf.sheets) if run.dxf else 0} DXF files</li>",
+        "</ul>",
+    ]
+    if run.build.skipped:
+        lines.append("<p style='color:#8a5a00'><b>Not built</b><ul>")
+        for mark, why in run.build.skipped[:6]:
+            lines.append(f"<li>{mark}: {why}</li>")
+        lines.append("</ul></p>")
+    if run.warnings or run.build.warnings:
+        lines.append("<p style='color:#8a5a00'><b>Notes</b><ul>")
+        for w in list(run.build.warnings) + list(run.warnings):
+            lines.append(f"<li>{w}</li>")
+        lines.append("</ul></p>")
+    return "".join(lines)
+
+
+def main() -> None:
+    global PEB_ROOT
+    if not PEB_ROOT:
+        if not HAVE_GUI:
+            App.Console.PrintError(
+                "BIMSteelAuto: the 'peb' package folder was not found\n"
+            )
+            return
+        PEB_ROOT = QtWidgets.QFileDialog.getExistingDirectory(
+            None, "BIMSteelAuto - find the 'peb' package folder"
+        )
+        if not PEB_ROOT or not os.path.isdir(
+            os.path.join(PEB_ROOT, "bimsteelauto_fc")
+        ):
+            QtWidgets.QMessageBox.warning(
+                None, "BIMSteelAuto",
+                "That is not the 'peb' folder - it must contain "
+                "bimsteelauto_fc.",
+            )
+            return
+        App.ParamGet(_PARAM).SetString("PebRoot", PEB_ROOT)
+
+    if PEB_ROOT not in sys.path:
+        sys.path.insert(0, PEB_ROOT)
+
+    json_path = _ask_for_json()
+    if not json_path:
+        return
+    if not os.path.exists(json_path):
+        msg = (f"No design_result.json at:\n{json_path}\n\n"
+               "Run run_frame_example.py (or your own pipeline script) "
+               "first - that is what writes it.")
+        if HAVE_GUI:
+            QtWidgets.QMessageBox.warning(None, "BIMSteelAuto", msg)
+        else:
+            App.Console.PrintError(msg + "\n")
+        return
+    _remember(json_path)
+
+    out_dir = os.path.join(os.path.dirname(json_path), "out")
+
+    from bimsteelauto_fc import build_all
+
+    App.Console.PrintMessage("BIMSteelAuto: building...\n")
+    if HAVE_GUI:
+        QtWidgets.QApplication.setOverrideCursor(
+            QtGui.QCursor(QtCore.Qt.WaitCursor)
+        )
+    try:
+        run = build_all(json_path, out_dir)
+    except Exception:                                    # noqa: BLE001
+        tb = traceback.format_exc()
+        App.Console.PrintError(tb)
+        if HAVE_GUI:
+            QtWidgets.QApplication.restoreOverrideCursor()
+            QtWidgets.QMessageBox.critical(
+                None, "BIMSteelAuto - build failed", tb[-2000:]
+            )
+        return
+    finally:
+        if HAVE_GUI:
+            QtWidgets.QApplication.restoreOverrideCursor()
+
+    App.Console.PrintMessage(run.summary() + "\n")
+
+    if HAVE_GUI and run.build.document is not None:
+        try:
+            Gui.ActiveDocument = Gui.getDocument(run.build.document.Name)
+            Gui.SendMsgToActiveView("ViewFit")
+            Gui.activeDocument().activeView().viewAxonometric()
+            Gui.SendMsgToActiveView("ViewFit")
+        except Exception:                                # noqa: BLE001
+            pass
+        box = QtWidgets.QMessageBox()
+        box.setWindowTitle("BIMSteelAuto")
+        box.setTextFormat(QtCore.Qt.RichText)
+        box.setText(_report(run, out_dir))
+        box.exec_()
+
+
+main()

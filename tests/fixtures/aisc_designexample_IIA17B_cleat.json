@@ -1,0 +1,53 @@
+{
+  "source": "AISC Design Examples V15.0, Example II.A-17B (single-plate connection, beam to column flange)",
+  "how_obtained": "AISC's published values reprinted in CET.SteelConnDesign User Manual Table 6.2, alongside CET's own results. The numbers are AISC's, not CET's.",
+  "recorded": "2026-08-31",
+
+  "status": "PARTIAL — outputs available, INPUTS NOT. Same shape of gap as the old B1_C1 end-plate record.",
+  "blocking": [
+    "plate grade (A36 assumed, not stated in the manual's figure)",
+    "beam grade",
+    "exact plate depth vs the figured 1'-2 1/2\"",
+    "leh (AISC 1.75 in per the manual's note 1; CET used 2.0)",
+    "the bolt-group eccentricity e that AISC used",
+    "whether the tabulated values are factored or nominal"
+  ],
+  "reconstruction_attempted": {
+    "result": "FAILED for the plate limit states",
+    "detail": "reading the figure as PL 1/2 x 5 x 14.5 with A36 gives shear yielding 156.6 kips and shear rupture 128.1 kips against AISC's published 145 and 92.5. The mismatch means the reconstruction is wrong, NOT that the module is. Chasing it further would be building on inferred inputs — the mistake that produced and then destroyed the base-plate 'flange lever arm' model.",
+    "conclusion": "the plate and block-shear limit states CANNOT be verified from this source. Only a CET run with recorded inputs, or the AISC example itself, will do it."
+  },
+
+  "what_IS_verifiable_here": {
+    "why": "one quantity needs no reconstruction at all: the single-bolt shear capacity is fixed by AISC Table J3.2 and the bolt area alone.",
+    "single_bolt_7_8in_A325N_single_shear": {
+      "aisc_hand_calc": "0.75 * 54 ksi * 0.6013 in2 = 24.353 kips",
+      "module": 24.352,
+      "delta_pct": 0.004
+    }
+  },
+
+  "defect_12": {
+    "title": "the purlin cleat applies NO bolt-group eccentricity coefficient",
+    "found_by": "AISC Design Example II.A-17B published bolt shear, 2026-08-31",
+    "evidence": {
+      "aisc_published_bolt_shear": 74.5,
+      "aisc_per_bolt": 24.353,
+      "implied_coefficient": 3.059,
+      "note": "74.5 / 24.353 = 3.059, which is the eccentric bolt-group coefficient C from AISC Manual Table 7-7 for five bolts at 3 in spacing. That is not a coincidence — it reproduces to three figures.",
+      "module_code": "raw.append(('bolt shear (J3.6)', n_bolts * n_shear_planes * Vb))",
+      "module_result": 121.762,
+      "ratio": 1.634
+    },
+    "direction": "UNCONSERVATIVE — the module reads 1.63x AISC on this joint",
+    "grade_independent": "this finding does not depend on any of the blocked inputs above. The per-bolt value matches AISC exactly (0.004%), and the coefficient is recovered from AISC's own published total.",
+    "scope_question_for_Ahmed": "a purlin-to-rafter cleat IS eccentric — the bolt group sits off the rafter face — so the omission looks real for the module's own use case too. But how large e is on a PEB purlin cleat, and whether the project wants the Table 7-7 instantaneous-centre method or a simpler eccentric-shear treatment, is a design decision, not a code fix. NOT fixed pending that decision.",
+    "status": "open"
+  },
+
+  "flag_decision": {
+    "secondary.cleat": "STAYS FALSE",
+    "why": "one limit state examined, one defect found, and the remaining five limit states are unverifiable from this source because its inputs were never recorded. This closes nothing.",
+    "closes_when": "a CET run on a single-plate or beam-web-angle connection with every input captured — the same protocol that closed 4E, 4ES and 8ES."
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "source": "AISC Design Guide 1, 2nd Edition — Base Plate and Anchor Rod Design",
+  "sections_read": ["3.1.1", "3.1.2", "3.1.4", "3.2", "3.2.1", "3.3.1", "3.3.2", "3.3.4", "3.4", "3.4.1", "3.4.2", "3.4.3", "3.4.4"],
+  "recorded": "2026-08-31",
+  "status": "complete — this is the DESIGN BASIS itself, not a tool that implements it",
+
+  "why_this_outranks_the_profis_runs": "PROFIS is one implementation of one method. DG 1 is the document the project's design basis names. A disagreement with PROFIS is a question; a disagreement with DG 1 would be a defect. That asymmetry is why four PROFIS runs could not settle what one reading of Sect. 3.4.1 did.",
+
+  "equation_map": {
+    "3.3.4":  {"relation": "q = f_p(max) * B, FULL plate width", "match": "exact"},
+    "3.3.7":  {"relation": "e_crit = N/2 - Pr/(2*q_max)", "module": 214.9447, "match": "exact"},
+    "3.4.2":  {"relation": "T = q_max*Y - Pr  (vertical equilibrium)", "module": 241.2832, "match": "exact"},
+    "3.4.3":  {"relation": "Y = (f+N/2) - sqrt[(f+N/2)^2 - 2*Pr*(e+f)/q_max]", "module": 52.4596, "match": "exact"},
+    "3.4.4":  {"relation": "radical condition (f+N/2)^2 >= 2*Pr*(e+f)/q_max", "match": "exact"},
+    "3.1.2":  {"relation": "m=(N-0.95d)/2, n=(B-0.8bf)/2, n'=sqrt(d*bf)/4, X, lambda", "match": "exact"},
+    "3.1.1":  {"relation": "Pp = 0.85*f'c*A1*sqrt(A2/A1)", "match": "exact"}
+  },
+
+  "the_key_line": "DG 1's moment equation about point B is q_max*Y*(N/2 - Y/2 + f) - Pr*(e+f) = 0. The lever arm N/2 - Y/2 places the bearing resultant at the PLATE EDGE, over the FULL width B. That is exactly what the module does.",
+
+  "resolution_of_candidate_defect_9a": {
+    "verdict": "NOT A DEFECT — withdrawn",
+    "was": "the module read 21-39% low against PROFIS's equivalent-rigid anchor forces across Cases C, D and E, and the bias grew with axial load. Three candidate replacement models were proposed and all three were rejected by further runs.",
+    "now": "the module implements DG 1 Sect. 3.4.1 correctly. The gap is a genuine METHOD difference: DG 1 uses a uniform plastic bearing block over the whole plate at the compression edge; PROFIS's CBFEM concentrates bearing near the column footprint.",
+    "consequence": "adopting PROFIS-like anchor tensions would be a change of DESIGN BASIS, not a bug fix. The gap stays recorded in profis_baseplate_cases.json so the choice is visible on any calculation sheet.",
+    "lesson": "four PROFIS runs established that two tools differ but could never say which was right. Only the governing document could. Comparing an implementation against another implementation is not verification against a standard."
+  },
+
+  "defect_13": {
+    "title": "DG 1 Eq. 3.3.15 (Y < l bearing-interface thickness) was missing entirely",
+    "was": "the module always used Eq. 3.3.14, tp = l*sqrt(2*fp/(phi*Fy))",
+    "now": "tp = sqrt(4*fp*Y*(l - Y/2)/(phi*Fy)) when Y < l",
+    "direction": "CONSERVATIVE — 3.3.15 <= 3.3.14 for all Y < l, and they meet at Y = l",
+    "not_hypothetical": "Case C has Y = 52.46 mm against m = 82.5 mm, so the branch applies",
+    "status": "FIXED"
+  },
+
+  "defect_14": {
+    "title": "tension-interface thickness halved the moment and used the wrong lever arm",
+    "was": "M_up = T*arm/2 with arm = f - 0.95d/2",
+    "now": "DG 1 Eq. 3.4.5: Mpl = Tu*x/B with NO 1/2; Eq. 3.4.6: x = f - d/2 + tf/2",
+    "direction": "UNCONSERVATIVE — the spurious /2 made tp exactly 1/sqrt(2) = 0.707 of DG 1's, 29% low",
+    "api_change": "BasePlateGeometry gained an optional tf. When omitted the module falls back to x = f - d/2 and WARNS, because dropping tf/2 shortens the lever and is unconservative.",
+    "note": "in Case C the bearing interface governs (38.9 mm vs 14.3 mm), so this error did not bite there — but it would on a geometry where the tension side controls",
+    "status": "FIXED"
+  },
+
+  "flags_closed": {
+    "baseplate.bearing": "Eq. 3.3.4 and 3.1.1",
+    "baseplate.lambda": "Eq. 3.1.2 X and lambda",
+    "baseplate.eccentricity": "Eq. 3.3.7, 3.4.2, 3.4.3, 3.4.4",
+    "baseplate.thickness": "Eq. 3.3.14, 3.3.15, 3.4.5, 3.4.6, 3.4.7 — after fixing #13 and #14"
+  },
+
+  "residual_limitations": [
+    "these equations were read off scanned pages. The transcription risk now sits on THIS side of the comparison, not the tool's. Anyone re-checking should read Sects. 3.1.2, 3.3 and 3.4 directly rather than trusting this fixture.",
+    "DG 1 has no explicit uplift-plus-moment case. The defect #9b fix extends Eq. 3.4.3 with Pr carried through signed — a direct extension, but not something DG 1 states.",
+    "the small-moment case (e <= e_crit, DG 1 Sect. 3.3) was read but not separately exercised against a worked example.",
+    "no DG 1 worked example was run end to end. The check is equation-by-equation, which catches a wrong formula but not a wrong procedure."
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "source": "CET.SteelConnDesign V2.0",
+  "report": "Connection Design Report 06, B1_C1, 2026-08-31",
+  "basis": "AISC Design Guide 4",
+  "settings": "AISC 15th / LRFD",
+  "recorded": "2026-08-31",
+  "status": "complete — inputs and outputs both recorded, run is reproducible",
+
+  "role": "8ES run 3 — THE run that closes the flag. Runs 1 and 2 both used pb = 3.0, at which every plausible form of the defect #11 term agrees within 3.4 in. This run varied pb to 5.0, where they spread ~18 in.",
+
+  "provenance": "BLIND. Ahmed reported Row Spacing = 5 in the message text. The module's value (938.156) was computed and posted in its own step BEFORE the report's Yp line was opened. The candidate table had been registered earlier still, in cet_endplate_8ES_W36x150.json, before this run existed.",
+
+  "inputs": {
+    "beam": "W36X150, A992 (d 35.9, tf 0.94)",
+    "column": "W18X60, A992, to the column flange",
+    "config": "8ES",
+    "bp": 12.0, "g": 3.5, "pfo": 1.0, "pfi": 1.0, "de": 0.875, "pb": 5.0,
+    "h1": 41.43, "h2": 36.43, "h3": 33.49, "h4": 28.49,
+    "s": 3.24037,
+    "Mu_kipin": 4800.0, "V_kips": 50.0, "units": "imperial"
+  },
+
+  "outputs": { "Yp": {"cet": 938.2, "mine": 938.156, "unit": "in", "tol_pct": 0.02} },
+
+  "discrimination": {
+    "registered_before_the_run": {
+      "pb^2 (module)": 938.16, "pb^2/2": 931.01, "2*pb": 929.58,
+      "pb*s": 933.13, "pb^3/3": 947.68
+    },
+    "cet": 938.2,
+    "verdict": "pb^2 confirmed. The other four are out by 5.0 to 9.5 in — far outside CET's 0.1 in print precision.",
+    "corroboration": "CET printed the bracket term literally as '(5 in.)^2' = 25, so the form is visible in the report, not just inferred from the total.",
+    "why_pb_mattered": "pb is SQUARED in the corrected term. At pb = 3.0 the term is 5.1429 and pb^3/3 gives EXACTLY the same answer as pb^2 — runs 1 and 2 could not have separated them. At pb = 5.0 the term is 14.2857 and pb^3/3 is out by 9.5 in."
+  },
+
+  "flag_decision": {
+    "endplate.8ES": "FLIPPED TO TRUE 2026-08-31",
+    "basis": [
+      "the expression was printed in full by CET on three geometries and is identical each time",
+      "defect #11's term was found on run 1 and DISCRIMINATED on run 3 against four alternatives",
+      "the module's value was computed and posted before the report was opened",
+      "the candidate predictions were registered before the run was even made"
+    ],
+    "residual_limitations": [
+      "g = 3.5 and de = 0.875 in all three 8ES runs — neither was varied. Both appear only in terms present before the fix and confirmed by the printed expression.",
+      "the module's de = min(de, s) cap is untested: de 0.875 sat far below s 3.24 every time.",
+      "pfo = pfi = 1.0 throughout; the two are never distinguished by any 8ES run."
+    ],
+    "reversible": "set VERIFIED['8ES'] = False and the gate closes again."
+  },
+
+  "module_status_after_this": "the endplate module is now fully verified — 4E, 4ES and 8ES. It cost three defects to get there: #1 (4E, missing 1/s and -1/2), #10 (4ES, missing 1/s and 1/(2s)), #11 (8ES, missing pb^2). No two were the same, and none could be predicted from the others."
+}
