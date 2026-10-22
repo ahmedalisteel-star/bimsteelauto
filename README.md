@@ -1,31 +1,66 @@
-# BIMSteelAuto
+# BIMSteelAuto - FreeCAD Workbench for Steel Buildings
 
-**From building parameters to designed, detailed steel - inside FreeCAD.**
+**From building parameters to a designed, detailed and quantified steel
+building - in one click inside FreeCAD.**
 
-BIMSteelAuto is a Python engineering library and FreeCAD workbench for
-Pre-Engineered Buildings (PEB) and steel portal frames. It runs the whole
-chain in one pipeline:
+BIMSteelAuto is a **FreeCAD workbench** for Pre-Engineered Buildings (PEB)
+and steel portal frames. Enter the building (span, bays, eave height, roof
+slope, cladding) and five wind inputs, press **Build model**, and it
+produces:
 
-1. **Member design** - AISC 360-16 hot-rolled frames (via
+- a designed **3D BIM model** of every member and connection
+- **calculation sheets** with every limit state and clause reference
+- **fabrication drawings** - general arrangement sheets and single-part shop
+  drawings (SVG and DXF)
+- a **material take-off (MTO)** - member schedule, piece count and tonnage,
+  counted off the model that was actually built
+- an **IFC4** export with a proper Site / Building / Storey tree
+
+## The FreeCAD workbench
+
+Pick **BIMSteelAuto** from FreeCAD's workbench selector. Its commands:
+
+| Command | What it does |
+|---|---|
+| **Build model** | Runs the full chain: loads, analysis, design, connections, 3D model, drawings, MTO, IFC |
+| **Design status** | Shows each member's utilisation and whether every check is verified |
+| **Result contours** | Draws displacement, stress and AISC utilisation on the 3D model |
+| **Open output folder** | Opens the calc sheets, drawings, MTO and IFC |
+| **Settings** | Points the workbench at the package folder |
+
+## What it designs
+
+1. **Loads** - ASCE 7-16 load combinations, and the Ch. 28 envelope wind
+   procedure from five site inputs (V, exposure, enclosure, Kzt, risk
+   category)
+2. **Analysis** - second-order (P-Delta) frame analysis with PyNite
+3. **Members** - AISC 360-16 hot-rolled and built-up frames (via
    [pyaisc360](https://github.com/ahmedalisteel-star/pyaisc360)) and
    AISI S100-16 cold-formed purlins and girts
-2. **Load generation** - ASCE 7-16 load combinations and the Ch. 28
-   envelope wind procedure from five site inputs (V, exposure, enclosure,
-   Kzt, risk category)
-3. **Connection design** - moment end plates (4E / 4ES / 8ES, AISC DG 4),
-   base plates (AISC DG 1), anchors (ACI 318-19 Ch. 17), welds and
-   column-side checks (AISC J2 / J10), purlin cleats and bracing gussets
-4. **Calculation sheets** - every limit state with its clause reference
-5. **Fabrication output** - 3D BIM model, part drawings, DXF general
-   arrangement sheets, schedules and IFC export
+4. **Connections** - moment end plates (4E / 4ES / 8ES, AISC DG 4), base
+   plates (AISC DG 1), anchors (ACI 318-19 Ch. 17), welds and column-side
+   checks (AISC J2 / J10), purlin cleats and bracing gussets
 
-Analysis is second-order (P-Delta) with PyNite.
+## Fabrication output
+
+- **Shop model** - the analysis stick model is turned into a fabrication
+  model: members trimmed at the knee and apex, end plates, cleats, girts and
+  eave struts placed where they are built, with a **clash check** (zero hard
+  clashes is a release condition)
+- **Fabrication drawings** - frame elevation, side elevation and roof plan
+  GA sheets, plus one shop drawing per distinct member mark, with title
+  block, scale and marks
+- **DXF drawing set** (`bsa_dxf`) - border, title block, grids, dimensions,
+  member marks, taper schedule and connection details; runs without
+  FreeCAD, so a drawing office can use it on its own
+- **MTO** - member schedule by mark with pieces, lengths and tonnage, taken
+  off the built model rather than the design, so nothing is under-counted
 
 ## Verified against independent tools
 
 A connection type is not marked ready for issue until it matches an
-independent reference. The calc sheet prints **NOT FOR ISSUE** while any
-check is still unverified.
+independent reference. Every sheet prints **NOT FOR ISSUE** while any check
+is still unverified.
 
 | Module | Reference | Agreement |
 |---|---|---|
@@ -36,16 +71,17 @@ check is still unverified.
 | Frame analysis | anastruct (second solver) | see tests |
 | Section properties | sectionproperties (FEM) | see tests |
 
-The reference values live in `tests/fixtures/`.
+The reference values live in `tests/fixtures/`. 990 tests pass.
 
 ## Layout
 
 ```
+BIMSteelAutoWB/            the FreeCAD workbench
 bimsteelauto/              engine: spec, loads, analysis, design, report (no FreeCAD import)
 bimsteelauto_connections/  connection design: bolts, endplate, welds, baseplate, anchors, secondary
-bimsteelauto_fc/           FreeCAD adapter: model builder, drawings, IFC, contours, clash check
-BIMSteelAutoWB/            FreeCAD workbench (Build model, Design status, Output folder, Settings)
-bsa/  bsa_dxf/             command line tool and DXF sheet writer
+bimsteelauto_fc/           FreeCAD adapter: shop model, drawings, MTO schedule, IFC, contours, clash check
+bsa_dxf/                   DXF fabrication drawing set (ezdxf only)
+bsa/                       command line tool
 vendor/                    vendored cold-formed engine and verification references
 tests/                     pytest suite, including verification against the tools above
 ```
@@ -61,11 +97,14 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-To use the workbench, link `BIMSteelAutoWB` into FreeCAD's `Mod` folder and
-point **Settings** at the repo folder. See `SETUP_NEW_PC.md` and
-`USER_GUIDE.md`.
+Then link the workbench into FreeCAD and restart it:
 
-Quick start: copy `new_project.py`, edit the building inputs, run it.
+```powershell
+New-Item -ItemType Junction -Path "$env:APPDATA\FreeCAD\Mod\BIMSteelAutoWB" -Target "$PWD\BIMSteelAutoWB"
+```
+
+Choose **BIMSteelAuto** in the workbench selector and use **Settings** to
+point it at the repo folder. See `USER_GUIDE.md` and `SETUP_NEW_PC.md`.
 
 ## Status
 
