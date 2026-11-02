@@ -1,0 +1,73 @@
+{
+  "schema": "bimsteelauto.fabdraw.clash_sets/1",
+  "status": "APPROVED 2026-10-26",
+  "parts_selector": "IfcBeam, IfcColumn, IfcMember, IfcPlate",
+  "constants": {
+    "CLASH_TOLERANCE_MM": "gate_clash.py - None until given; while None every penetration is hard",
+    "BOLT_WELD_CLEARANCE_MM": "gate_clash.py - None until given; W1 then reports NOT EVALUATED",
+    "BOLT_EDGE_MIN_D": "gate_clash.py - 1.25 (x bolt diameter), AISC 360-16 J3.4 as used in bimsteelauto_connections/secondary.py"
+  },
+  "sets": [
+    {
+      "id": "H1",
+      "name": "steel vs steel",
+      "severity": "hard",
+      "engine": "ifcclash",
+      "mode": "intersection",
+      "a": {
+        "selector": "IfcBeam, IfcColumn, IfcMember, IfcPlate"
+      },
+      "b": null,
+      "tolerance": "CLASH_TOLERANCE_MM",
+      "check_all": true,
+      "exclude": []
+    },
+    {
+      "id": "H2",
+      "name": "fasteners vs parts",
+      "severity": "hard",
+      "engine": "ifcclash",
+      "mode": "intersection",
+      "a": {
+        "selector": "IfcMechanicalFastener"
+      },
+      "b": {
+        "selector": "IfcBeam, IfcColumn, IfcMember, IfcPlate"
+      },
+      "tolerance": "CLASH_TOLERANCE_MM",
+      "check_all": true,
+      "exclude": [
+        "fastener_connected_parts"
+      ],
+      "exclude_source": [
+        "IfcRelConnectsWithRealizingElements (RelatingElement, RelatedElement)",
+        "else: the parts of the IfcElementAssembly the fastener is aggregated in"
+      ]
+    },
+    {
+      "id": "W1",
+      "name": "bolt to weld clearance",
+      "severity": "warning",
+      "engine": "ifcclash",
+      "mode": "clearance",
+      "a": {
+        "selector": "IfcMechanicalFastener"
+      },
+      "b": {
+        "selector": "IfcFastener, PredefinedType=WELD"
+      },
+      "clearance": "BOLT_WELD_CLEARANCE_MM",
+      "check_all": true,
+      "exclude": []
+    },
+    {
+      "id": "W2",
+      "name": "bolt to edge",
+      "severity": "warning",
+      "engine": "fabdraw",
+      "rule": "distance from each bolt-hole centre to the outer contour of the part it voids >= BOLT_EDGE_MIN_D x the bolt's NominalDiameter; needs extract.py (step 3) - until then NOT EVALUATED",
+      "exclude": []
+    }
+  ],
+  "pass_rule": "gate passes only when every hard set has 0 penetrations deeper than CLASH_TOLERANCE_MM; warning sets never block; CLASH_TOLERANCE_MM = None fails the gate"
+}

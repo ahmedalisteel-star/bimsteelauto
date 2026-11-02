@@ -8,7 +8,9 @@ produces::
     build_all("design_result.json", "out/")
 
     out/
-      <job>.FCStd                 the BIM model
+      <job>.FCStd                 the BIM model, one object per piece
+      <job>_param.FCStd           the v8 macro's parametric model (v8 engine)
+      <job>_v8_report.txt         the macro's own building report and checks
       <job>.ifc                   IFC4
       schedule.csv                the MTO
       GA_frame_elevation.svg      general arrangement
@@ -18,8 +20,15 @@ produces::
       PART_*.svg                  single-part drawings
 
 Nothing here decides anything.  Every number came out of the engine and
-every geometry decision is in :mod:`~bimsteelauto_fc.builder`; this module
-only sequences them and reports what happened.
+every geometry decision is in :mod:`~bimsteelauto_fc.builder` or the
+``peb_building_param_v8`` macro (driven by :mod:`~bimsteelauto_fc.v8`);
+this module only sequences them and reports what happened.
+
+Which builds the geometry: ``geometry="v8"`` - the macro, which carries the
+shop detailing (drilled flanges, plates with their bolt holes, anchors,
+cleats, clips, struts on cleats and fins, gussets) - is the default when the
+macro is found and the frame is one it covers; otherwise the built-in
+builder runs and the report says why. ``BSA_GEOMETRY`` overrides it.
 """
 
 from __future__ import annotations
@@ -72,6 +81,8 @@ class AdapterRun:
     parts: DrawingSet | None = None
     dxf: DrawingSet | None = None
     document_path: str = ""
+    param_path: str = ""
+    geometry: str = ""
     seconds: float = 0.0
     warnings: list[str] = field(default_factory=list)
 
@@ -90,8 +101,12 @@ class AdapterRun:
         out.append("")
         if self.build:
             out.append(self.build.summary())
+        if self.geometry:
+            out.append(f"geometry {self.geometry}")
         if self.document_path:
             out.append(f"model    {self.document_path}")
+        if self.param_path:
+            out.append(f"param    {self.param_path}")
         if self.ifc:
             out.append(f"ifc      {self.ifc.path}  ({self.ifc.n_elements} elements)")
         if self.ga:
@@ -123,6 +138,7 @@ def build_all(
     do_drawings: bool = True,
     do_parts: bool = True,
     do_dxf: bool = True,
+    geometry: str | None = None,
 ) -> AdapterRun:
     """Read the engine's JSON and produce the model, IFC, MTO and drawings.
 
@@ -136,9 +152,13 @@ def build_all(
     run = AdapterRun()
 
     run.result = load_result(json_path)
-    run.build = build_model(run.result)
+    run.build, run.geometry = _build(run.result, geometry, run.warnings)
     doc = run.build.document
     job = re.sub(r"[^A-Za-z0-9_.-]", "_", run.result.spec.job_number) or "model"
+    if run.build.macro_log:
+        with open(os.path.join(out_dir, job + "_v8_report.txt"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(run.build.macro_log)
 
     # -- schedule -----------------------------------------------------------
     run.schedule = member_schedule(run.build)
@@ -181,9 +201,34 @@ def build_all(
         path = os.path.join(out_dir, job + ".FCStd")
         doc.saveAs(path)
         run.document_path = path
+        pdoc = run.build.param_document
+        if pdoc is not None:
+            ppath = os.path.join(out_dir, job + "_param.FCStd")
+            pdoc.saveAs(ppath)
+            run.param_path = ppath
 
     run.seconds = time.time() - t0
     return run
+
+
+def _build(result, geometry, warnings):
+    """``(BuildReport, which)``: the v8 macro when asked for or available,
+    the built-in builder otherwise - and never silently: a fall back is a
+    warning that says why."""
+    want = (geometry or os.environ.get("BSA_GEOMETRY") or "auto").lower()
+    if want in ("auto", "v8"):
+        from . import v8
+
+        try:
+            v8.find_macro()
+            return v8.build_model_v8(result), "v8 (peb_building_param_v8)"
+        except (v8.MacroNotFound, NotImplementedError) as exc:
+            if want == "v8":
+                raise
+            warnings.append(
+                f"the v8 macro was not used - {exc} - so the built-in "
+                "builder made the model, without the macro's shop detailing")
+    return build_model(result), "built-in (bimsteelauto_fc.builder)"
 
 
 def print_report(run: AdapterRun) -> None:

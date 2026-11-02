@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ids:ids xmlns:ids="http://standards.buildingsmart.org/IDS"
+         xmlns:xs="http://www.w3.org/2001/XMLSchema"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd">
+  <ids:info>
+    <ids:title>BIMSteelAuto - fabrication ready</ids:title>
+    <ids:version>0.1-draft</ids:version>
+    <ids:description>G2 data gate for fabdraw. Every value a fabrication drawing needs must be in the IFC; nothing is guessed downstream.</ids:description>
+    <ids:purpose>Fabrication drawings</ids:purpose>
+  </ids:info>
+  <ids:specifications>
+
+    <!-- FR-01  beams/columns/members carry a profile -->
+    <ids:specification name="FR-01 linear part has a profile" ifcVersion="IFC4" identifier="FR-01">
+      <ids:applicability minOccurs="0" maxOccurs="unbounded">
+        <ids:entity><ids:name><xs:restriction base="xs:string">
+          <xs:enumeration value="IFCBEAM"/><xs:enumeration value="IFCCOLUMN"/><xs:enumeration value="IFCMEMBER"/>
+        </xs:restriction></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:property dataType="IFCLABEL" cardinality="required">
+          <ids:propertySet><ids:simpleValue>BSA_Fabrication</ids:simpleValue></ids:propertySet>
+          <ids:baseName><ids:simpleValue>Profile</ids:simpleValue></ids:baseName>
+        </ids:property>
+      </ids:requirements>
+    </ids:specification>
+
+    <!-- FR-02  plates carry a thickness -->
+    <ids:specification name="FR-02 plate has a thickness" ifcVersion="IFC4" identifier="FR-02">
+      <ids:applicability minOccurs="0" maxOccurs="unbounded">
+        <ids:entity><ids:name><ids:simpleValue>IFCPLATE</ids:simpleValue></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:property dataType="IFCPOSITIVELENGTHMEASURE" cardinality="required">
+          <ids:propertySet><ids:simpleValue>BSA_Fabrication</ids:simpleValue></ids:propertySet>
+          <ids:baseName><ids:simpleValue>Thickness</ids:simpleValue></ids:baseName>
+        </ids:property>
+      </ids:requirements>
+    </ids:specification>
+
+    <!-- FR-03  every part: grade, part mark, main-part flag, in an assembly -->
+    <ids:specification name="FR-03 part is fabrication-identified" ifcVersion="IFC4" identifier="FR-03">
+      <ids:applicability minOccurs="1" maxOccurs="unbounded">
+        <ids:entity><ids:name><xs:restriction base="xs:string">
+          <xs:enumeration value="IFCBEAM"/><xs:enumeration value="IFCCOLUMN"/>
+          <xs:enumeration value="IFCMEMBER"/><xs:enumeration value="IFCPLATE"/>
+        </xs:restriction></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:material cardinality="required"/>
+        <ids:property dataType="IFCLABEL" cardinality="required">
+          <ids:propertySet><ids:simpleValue>BSA_Fabrication</ids:simpleValue></ids:propertySet>
+          <ids:baseName><ids:simpleValue>PartMark</ids:simpleValue></ids:baseName>
+        </ids:property>
+        <ids:property dataType="IFCBOOLEAN" cardinality="required">
+          <ids:propertySet><ids:simpleValue>BSA_Fabrication</ids:simpleValue></ids:propertySet>
+          <ids:baseName><ids:simpleValue>IsMainPart</ids:simpleValue></ids:baseName>
+        </ids:property>
+        <ids:partOf relation="IFCRELAGGREGATES" cardinality="required">
+          <ids:entity><ids:name><ids:simpleValue>IFCELEMENTASSEMBLY</ids:simpleValue></ids:name></ids:entity>
+        </ids:partOf>
+      </ids:requirements>
+    </ids:specification>
+
+    <!-- FR-04  every assembly carries an assembly mark -->
+    <ids:specification name="FR-04 assembly has a mark" ifcVersion="IFC4" identifier="FR-04">
+      <ids:applicability minOccurs="1" maxOccurs="unbounded">
+        <ids:entity><ids:name><ids:simpleValue>IFCELEMENTASSEMBLY</ids:simpleValue></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:property dataType="IFCLABEL" cardinality="required">
+          <ids:propertySet><ids:simpleValue>BSA_Fabrication</ids:simpleValue></ids:propertySet>
+          <ids:baseName><ids:simpleValue>AssemblyMark</ids:simpleValue></ids:baseName>
+        </ids:property>
+      </ids:requirements>
+    </ids:specification>
+
+    <!-- FR-05  every fastener: nominal diameter, nominal length, grade -->
+    <ids:specification name="FR-05 fastener is fully specified" ifcVersion="IFC4" identifier="FR-05">
+      <ids:applicability minOccurs="0" maxOccurs="unbounded">
+        <ids:entity><ids:name><ids:simpleValue>IFCMECHANICALFASTENER</ids:simpleValue></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:attribute cardinality="required">
+          <ids:name><ids:simpleValue>NominalDiameter</ids:simpleValue></ids:name>
+        </ids:attribute>
+        <ids:attribute cardinality="required">
+          <ids:name><ids:simpleValue>NominalLength</ids:simpleValue></ids:name>
+        </ids:attribute>
+        <ids:material cardinality="required"/>
+      </ids:requirements>
+    </ids:specification>
+
+    <!-- FR-06  every hole is an opening voiding a part -->
+    <ids:specification name="FR-06 hole voids a part" ifcVersion="IFC4" identifier="FR-06">
+      <ids:applicability minOccurs="0" maxOccurs="unbounded">
+        <ids:entity><ids:name><ids:simpleValue>IFCOPENINGELEMENT</ids:simpleValue></ids:name></ids:entity>
+      </ids:applicability>
+      <ids:requirements>
+        <ids:partOf relation="IFCRELVOIDSELEMENT IFCRELFILLSELEMENT" cardinality="required">
+          <ids:entity><ids:name><xs:restriction base="xs:string">
+            <xs:enumeration value="IFCBEAM"/><xs:enumeration value="IFCCOLUMN"/>
+            <xs:enumeration value="IFCMEMBER"/><xs:enumeration value="IFCPLATE"/>
+          </xs:restriction></ids:name></ids:entity>
+        </ids:partOf>
+      </ids:requirements>
+    </ids:specification>
+
+  </ids:specifications>
+</ids:ids>

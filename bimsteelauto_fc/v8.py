@@ -43,6 +43,7 @@ __all__ = [
     "load_macro",
     "frame_inputs",
     "build_v8",
+    "build_model_v8",
 ]
 
 #: The decisions where the design and the macro do not describe the same
@@ -68,7 +69,6 @@ CHOICES: tuple[str, ...] = (
 
 #: Where the macro is looked for, first hit wins. ``BSA_V8_MACRO`` overrides.
 _CANDIDATES = (
-    r"<your-macro-folder>\peb_building_param_v8.py",
     os.path.expandvars(r"%APPDATA%\FreeCAD\v1-1\peb_building_param_v8.FCMacro"),
     os.path.expandvars(r"%APPDATA%\FreeCAD\Macro\peb_building_param_v8.FCMacro"),
 )
@@ -208,8 +208,6 @@ def frame_inputs(result) -> tuple[dict, list[str]]:
         "NumBays": len(g.bay_spacings),
         "BaySpacing": float(g.bay_spacings[0]),
         "BaySpacings": [float(b) for b in g.bay_spacings],
-        # a straight taper is the legacy three points with the haunch at
-        # (just under) half the rafter and the mid depth halfway - set below
         "PurlinSpacing": float(g.purlin_spacing),
         "DetailLevel": "Full",
         # 02 column - outer flange = the section's top flange, as fabrication.py
@@ -235,8 +233,17 @@ def frame_inputs(result) -> tuple[dict, list[str]]:
         "ER_gap": 5.0,
     }
     inp["Raf_h_mid"] = (inp["Raf_h_eaves"] + inp["Raf_h_apex"]) / 2.0
+    # The design rafter is ONE straight taper, end plate to end plate. The
+    # macro's three numbers describe two haunches and a prismatic middle, so
+    # the taper goes in its profile table instead - three control points on
+    # one straight line, stations along the slope from the end plate face.
     l_raf = (span / 2.0 - t_ep - (d_top + t_ep)) / c
-    inp["HaunchLen"] = l_raf / 2.0 - 2.0
+    inp["Raf_profile_ref"] = "Along slope from eaves"
+    inp["Raf_profile"] = [
+        0.0, inp["Raf_h_eaves"], r0.bf_top, r0.tf_top, r0.bf_bot, r0.tf_bot,
+        l_raf / 2.0, inp["Raf_h_mid"], 0.0, 0.0, 0.0, 0.0,
+        l_raf, inp["Raf_h_apex"], 0.0, 0.0, 0.0, 0.0,
+    ]
 
     # 04 end plates
     if ec:
@@ -417,7 +424,7 @@ def _clear_of_cleats(s_node, inp, l_raf, notes):
     d.update({k: inp[k] for k in d if k in inp})
     reach = (d["GS_e1"] + (int(d["GS_bolts"]) - 1) * d["GS_pitch"]
              + d["GS_edge"] + d["GS_setback"])
-    need = reach + d["CL_leg"] / 2.0 + d["ER_gap"]
+    need = reach + d["CL_leg"] / 2.0 + d["ER_gap"] + 1.0
     first = inp.get("PU_first")
     if first is None:
         return s_node
@@ -476,14 +483,368 @@ def build_v8(result, *, document_name: str = "BSA_v8", macro=None):
             except Exception as exc:                    # noqa: BLE001
                 notes.append(f"could not set {k} = {v!r}: {exc}")
 
+    import contextlib
+    import io
+
     old_doc = mod.DOC
     mod.DOC = document_name
     mod.PEBFrame.__init__ = _init
+    log = io.StringIO()
     try:
-        doc = mod.build()
+        # The macro prints its own building report - kept, not shown: build_all
+        # writes it next to the model.
+        with contextlib.redirect_stdout(log):
+            doc = mod.build()
     finally:
         mod.PEBFrame.__init__ = orig_init
         mod.DOC = old_doc
     frame = doc.getObject("PEB_Frame")
     doc.recompute()
+    build_v8.last_log = log.getvalue()
     return doc, frame, notes, inputs
+
+
+# ---------------------------------------------------------------------------
+# One object per piece
+# ---------------------------------------------------------------------------
+#
+# The macro keeps every piece of a kind in ONE object - all nine columns of
+# a side in Column_L, every purlin of a slope in Purlins_R. That is right for
+# a parametric model and wrong for everything downstream of it: an IFC with
+# one IfcColumn holding a whole side, a schedule that cannot count, a clash
+# check that cannot see two purlins in the same steel because they are the
+# same object. So the delivered model is the macro's solids, one Arch object
+# per piece, in Layer 2's axes, carrying the design's marks, weights and
+# utilisations. The macro's own document is saved beside it as the
+# PARAMETRIC model.
+
+_MACRO_KIND = {
+    "PEBColumn": "column", "PEBRafter": "rafter", "PEBEndPlateV": "end_plate",
+    "PEBBasePlate": "base", "PEBRoofCleats": "purlin_cleat",
+    "PEBGirtClips": "girt_clip", "PEBPurlins": "purlin", "PEBGirts": "girt",
+    "PEBStruts": "strut", "PEBWallBracing": "wall_bracing",
+    "PEBRoofBracing": "roof_bracing",
+}
+
+
+def _extents(shape) -> list[float]:
+    """The piece's extents along its own principal axes, longest first.
+
+    Not the bounding box - a raking rod or a sloping rafter has a bounding
+    box as long as its run and as tall as its rise - and not the longest
+    edge, because a lofted member's edges are splines."""
+    try:
+        pp = shape.PrincipalProperties
+        axes = [pp["FirstAxisOfInertia"], pp["SecondAxisOfInertia"],
+                pp["ThirdAxisOfInertia"]]
+    except Exception:                                   # noqa: BLE001
+        bb = shape.BoundBox
+        return sorted((bb.XLength, bb.YLength, bb.ZLength), reverse=True)
+    pts = [v.Point for v in shape.Vertexes]
+    out = []
+    for a in axes:
+        d = [p.dot(a) for p in pts]
+        out.append(max(d) - min(d))
+    return sorted(out, reverse=True)
+
+
+def _longest_edge(shape) -> float:
+    """Length of a member piece, along its own long axis."""
+    return _extents(shape)[0]
+
+
+def _is_rod(solid) -> bool:
+    """A long thin bar - an anchor or a brace rod, never a plate: one
+    extent far beyond the other two. The macro draws a rod brace as a
+    square bar of the rod's diameter, so roundness is not the test."""
+    e = _extents(solid)
+    return e[0] > 4.0 * e[1] and e[1] < 100.0
+
+
+def _plate_dims(solid):
+    """``(t, w, h)`` of a flat plate, ``w <= h``: thickness from its volume
+    over its biggest face, outline from that face's own extents."""
+    import FreeCAD as App
+
+    face = max(solid.Faces, key=lambda f: f.Area)
+    t = solid.Volume / face.Area if face.Area > 0 else 0.0
+    try:
+        n = face.normalAt(0, 0)
+    except Exception:                                   # noqa: BLE001
+        e = sorted((solid.BoundBox.XLength, solid.BoundBox.YLength,
+                    solid.BoundBox.ZLength))
+        return e[0], e[1], e[2]
+    ref = App.Vector(0, 0, 1) if abs(n.z) < 0.9 else App.Vector(1, 0, 0)
+    u = n.cross(ref)
+    u.normalize()
+    v = n.cross(u)
+    v.normalize()
+    pts = [p.Point for p in face.OuterWire.Vertexes]
+    us = [p.dot(u) for p in pts]
+    vs = [p.dot(v) for p in pts]
+    w, h = sorted((max(us) - min(us), max(vs) - min(vs)))
+    return t, w, h
+
+
+def _row_profile(obj) -> str | None:
+    """The macro's own description of a part, off its ScheduleRows -
+    ``Purlin cleat 60x6, legs 100/114`` - which says what a bent cleat or
+    clip is better than any flat-plate size could."""
+    rows = list(getattr(obj, "ScheduleRows", []) or [])
+    if len(rows) != 1:
+        return None
+    desc = rows[0].split("|")[1] if "|" in rows[0] else ""
+    return desc.split(" capped")[0].strip() or None
+
+
+def _pl_profile(solid) -> str:
+    t, w, h = _plate_dims(solid)
+    return f"PL {round(t * 2.0) / 2.0:g} x {w:.0f} x {h:.0f}"
+
+
+def build_model_v8(result, doc=None, *, document_name=None, macro=None):
+    """The macro's building for ``result``, one Arch object per piece.
+
+    Returns a :class:`~bimsteelauto_fc.builder.BuildReport` whose
+    ``document`` is the per-piece model and whose ``param_document`` is the
+    macro's own parametric document.
+
+    Weights are the DESIGN's, as in the built-in builder: a column or rafter
+    piece carries its member's weight, a purlin, girt or strut piece its
+    share (by volume) of the design runs, a rod its design weight. Plates
+    and anchors are weighed off their own solids, as before.
+    """
+    import FreeCAD as App
+    import Part
+
+    from bimsteelauto.analysis import build_layout
+    from bimsteelauto.spec import MemberType
+
+    from . import builder as bl
+    from . import detailing as dt
+
+    job = (re.sub(r"[^A-Za-z0-9_]", "_", result.spec.job_number)
+           or "BIMSteelAuto")
+    report = bl.BuildReport()
+    pdoc, frame, notes, inputs = build_v8(
+        result, document_name=(document_name or job) + "_param", macro=macro)
+    report.param_document = pdoc
+    report.macro_log = getattr(build_v8, "last_log", "")
+    report.warnings.extend(f"choice {c}" for c in CHOICES)
+    report.warnings.extend(notes)
+    report.warnings.extend(f"v8: {c}" for c in (frame.Checks or ()))
+
+    if doc is None:
+        doc = App.newDocument(document_name or job)
+    report.document = doc
+
+    g = result.spec.geometry
+    span = float(g.span_widths[0])
+    d0 = _taper(_member(result, "column")).start.d
+    ys = bl.frame_line_positions(g)
+    # Macro (X along, Y across, origin on the first column base centreline)
+    # to Layer 2 (X across, Y along, grid on the outer column face): a
+    # quarter turn about Z and a shift. A ROTATION, never a mirror - a
+    # mirrored Z purlin is a section nobody rolls. The macro's left side
+    # therefore lands on the right-hand grid.
+    to_l2 = App.Placement(App.Vector(span - d0 / 2.0, 0.0, 0.0),
+                          App.Rotation(App.Vector(0, 0, 1), 90.0))
+    side_map = {"Left": "2", "Right": "1"}
+
+    by_mark = {m.mark: m for m in result.members}
+    conns = {c.mark: c for c in (getattr(result, "connections", ()) or ())}
+    layout = build_layout(g, bl._sections_from_result(result))
+    fm_by_mark = {fm.mark: fm for fm in layout.members}
+
+    def place(solid):
+        sh = solid.copy()
+        sh.Placement = to_l2.multiply(sh.Placement)
+        return sh
+
+    def frame_no(sh):
+        y = sh.BoundBox.Center.y
+        return min(range(len(ys)), key=lambda i: abs(ys[i] - y)) + 1
+
+    groups: dict = {}
+
+    def grp(name, label):
+        if name not in groups:
+            o = doc.addObject("App::DocumentObjectGroup", name)
+            o.Label = label
+            groups[name] = o
+        return groups[name]
+
+    counters: dict[str, int] = {}
+
+    def label_for(mark):
+        counters[mark] = counters.get(mark, 0) + 1
+        return f"{mark}-{counters[mark]}"
+
+    cos = math.cos(math.atan(float(g.roof_slope)))
+
+    def length_of(sh, mtype):
+        # a tapered member's principal axis leans with its taper, so the
+        # frame members are measured the way the shop measures them
+        # and with the TIGHT box: the quick one is loose round the lofted
+        # (spline) faces the macro builds them from
+        try:
+            bb = sh.optimalBoundingBox()
+        except Exception:                               # noqa: BLE001
+            bb = sh.BoundBox
+        if mtype in (MemberType.COLUMN, MemberType.INTERIOR_COLUMN):
+            return bb.ZLength
+        if mtype is MemberType.RAFTER:
+            return bb.XLength / cos
+        return _longest_edge(sh)
+
+    def member(sh, mark, mtype, md, weight, group, label=None):
+        label = label or label_for(mark)
+        report.objects.append(bl._add_member(
+            doc, sh, name=label.replace("-", "_"), mark=label,
+            member_type=mtype, profile=md.section_id,
+            length=length_of(sh, mtype), weight=weight,
+            utilisation=md.utilisation, group=group))
+
+    def plate(sh, mark, kind, conn_mark=None, util=None, basis=None,
+              length=None, profile=None):
+        label = label_for(mark)
+        if util is None:
+            c = conns.get(conn_mark or mark)
+            util = float(getattr(c, "utilisation", 0.0) or 0.0) if c else 0.0
+        report.objects.append(bl._add_plate(
+            doc, sh, name=label.replace("-", "_"), mark=label, kind=kind,
+            profile=profile or _pl_profile(sh), mass=dt.mass_kg(sh),
+            length=(length if length is not None
+                    else _plate_dims(sh)[2]),
+            utilisation=util, group=grp("Connections",
+                                        "Connection detailing"),
+            report=report, basis=basis))
+
+    for o in pdoc.Objects:
+        cls = type(getattr(o, "Proxy", None)).__name__
+        kind = _MACRO_KIND.get(cls)
+        sh0 = getattr(o, "Shape", None)
+        if sh0 is None or sh0.isNull() or not sh0.Solids \
+                or o.TypeId.startswith("App::"):
+            continue
+        if kind is None:
+            report.warnings.append(
+                f"v8 object {o.Name} ({cls}) is not mapped to a piece type "
+                "- not carried into the model")
+            continue
+        side = side_map.get(str(getattr(o, "Side", "")), "")
+        solids = [place(s) for s in sh0.Solids]
+
+        if kind in ("column", "rafter"):
+            mark = ("C" if kind == "column" else "R") + side
+            md, fm = by_mark.get(mark), fm_by_mark.get(mark)
+            if md is None or fm is None:
+                report.skipped.append((mark, "no MemberDesign for it"))
+                continue
+            for sh in solids:
+                member(sh, mark, md.member_type, md, fm.taper.weight,
+                       grp("Frames", "Main frames"),
+                       label=f"{mark}-F{frame_no(sh)}")
+        elif kind == "end_plate":
+            cm = ("EC" + side) if str(getattr(o, "Role", "")) == "Eaves" \
+                else "AP1"
+            geom = dt.geometry_of(conns[cm]) if cm in conns else None
+            for sh in solids:
+                basis = None
+                if geom is not None:
+                    bb = sh.BoundBox
+                    # the layout's v = 0 is the top flange outer face
+                    basis = (App.Vector(bb.Center.x, bb.Center.y,
+                                        bb.ZMax - float(geom["ext_top_mm"])),
+                             App.Vector(0, 1, 0), App.Vector(0, 0, 1))
+                plate(sh, cm, "end_plate", basis=basis)
+        elif kind == "base":
+            mark = "BP" + side
+            geom = (dt.geometry_of(conns[mark]) if mark in conns else None) or {}
+            rods = [s for s in solids if _is_rod(s)]
+            for pl_ in (s for s in solids if not _is_rod(s)):
+                c = pl_.BoundBox.Center
+                plate(pl_, mark, "base_plate",
+                      basis=(App.Vector(c.x, c.y, c.z),
+                             App.Vector(1, 0, 0), App.Vector(0, 1, 0)))
+                mine = [r for r in rods
+                        if abs(r.BoundBox.Center.x - c.x) < 400.0
+                        and abs(r.BoundBox.Center.y - c.y) < 400.0]
+                if mine:
+                    # the anchors of one base are ONE object, as before: a
+                    # bag of bolts is bought, not fabricated
+                    d_a = float(geom.get("anchor_diameter_mm", 0.0)) or \
+                        min(mine[0].BoundBox.XLength, mine[0].BoundBox.YLength)
+                    L_a = _longest_edge(mine[0])
+                    plate(Part.makeCompound(mine), mark + "A", "anchor",
+                          conn_mark=mark, length=L_a,
+                          profile=f"M{d_a:.0f} x {L_a:.0f} anchor")
+        elif kind == "purlin_cleat":
+            prof = _row_profile(o)
+            for sh in solids:
+                plate(sh, "PC1", "purlin_cleat", profile=prof)
+        elif kind == "girt_clip":
+            prof = _row_profile(o)
+            for sh in solids:
+                plate(sh, "GC1", "girt_clip", util=0.0, profile=prof)
+        elif kind in ("purlin", "girt"):
+            mt = MemberType.PURLIN if kind == "purlin" else MemberType.GIRT
+            md = next((m for m in result.members if m.member_type is mt),
+                      None)
+            if md is None:
+                continue
+            # md.weight is ONE full-length run; the macro cuts each run into
+            # bay pieces, and this object is ONE side - one slope or one wall
+            # - so its share of the design is its own runs, by volume
+            runs = int(inputs.get("PU_count" if kind == "purlin"
+                                  else "GT_count", 0))
+            vol = sum(s.Volume for s in solids) or 1.0
+            for sh in solids:
+                member(sh, md.mark, mt, md, md.weight * runs * sh.Volume / vol,
+                       grp("Secondary", "Purlins, girts and struts"))
+        elif kind == "strut":
+            md = _member(result, "eave_strut")
+            tubes = [s for s in solids if _longest_edge(s) > 1000.0]
+            if md is not None and tubes:
+                run = ys[-1] - ys[0]
+                try:
+                    from bimsteelauto.sections import (TaperedMember,
+                                                       WeldedI, parse_mark)
+
+                    sec = parse_mark(md.section_id, run)
+                    if isinstance(sec, WeldedI):
+                        sec = TaperedMember(start=sec, end=sec, length=run)
+                    # one eave run, as the built-in builder weighs it - the
+                    # engine reports 0.0 for a strut it did not size
+                    w_run = sec.weight
+                except Exception:                       # noqa: BLE001
+                    w_run = md.weight
+                vol = sum(s.Volume for s in tubes) or 1.0
+                for sh in tubes:
+                    member(sh, md.mark, MemberType.EAVE_STRUT, md,
+                           2.0 * w_run * sh.Volume / vol,
+                           grp("Secondary", "Purlins, girts and struts"))
+            for sh in (s for s in solids if _longest_edge(s) <= 1000.0):
+                t, w, h = _plate_dims(sh)
+                # pl155 is the square cap; of the two lapping plates the
+                # cleat (pl153) is the longer
+                tag = "P" if abs(w - h) < 1.0 else (
+                    "C" if h >= float(inputs.get("ST_cl_L", 210.0)) - 1.0
+                    else "F")
+                plate(sh, f"ES1{tag}", "strut_plate", util=0.0)
+        elif kind in ("wall_bracing", "roof_bracing"):
+            mt = (MemberType.WALL_BRACING if kind == "wall_bracing"
+                  else MemberType.ROOF_BRACING)
+            md = next((m for m in result.members if m.member_type is mt),
+                      None)
+            if md is None:
+                continue
+            for sh in solids:
+                if _is_rod(sh):
+                    member(sh, md.mark, mt, md, md.weight,
+                           grp("Bracing", "Longitudinal bracing"))
+                else:
+                    plate(sh, md.mark + "G", "bracing_gusset", util=0.0)
+
+    doc.recompute()
+    return report

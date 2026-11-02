@@ -153,6 +153,11 @@ class BuildReport:
     """
 
     document: object = None
+    #: The parametric model the pieces came from, when there is one - the
+    #: v8 macro's document (see bimsteelauto_fc.v8). None for the built-in
+    #: builder.
+    param_document: object = None
+    macro_log: str = ""
     objects: list = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -521,6 +526,7 @@ DETAIL_IFC_FOR = {
     "base_plate": "Plate",
     "purlin_cleat": "Plate",
     "girt_clip": "Plate",
+    "strut_plate": "Plate",
     "bracing_gusset": "Plate",
     "anchor": "Mechanical Fastener",
 }

@@ -1,5 +1,142 @@
 # BIMSteelAuto - changelog
 
+## 0.14.0 - 2026-10-29 - fabrication drawings from the IFC (stage 5, steps 3-4)
+
+The fabrication drawings were drawn from `model.json` by the steel-project
+skill's `fab_drawings.py`: one view, holes in a table instead of dimensioned,
+no single-part sheets, no NC, and a hole table that ran over the title block
+(JOB-018 R1a). They now come straight from the IFC, in the layout of the
+Tekla reference set SH014 (A3 assembly / A4 single), behind the gates the
+package docstring already promised.
+
+**New in `bimsteelauto/fabdraw`** (relative imports only - also runs on its
+own; the new `ifc-fab-drawings` skill carries a copy):
+
+- `extract.py` - IFC -> assemblies, parts, holes, weights, allocation. World
+  meshes from `ifcopenshell.geom`; a member is set out along its straight
+  flange (vertical one on a column, top one on a rafter), its depth is the
+  face group whose planes lie furthest apart (I, H, C, Z, RHS, tapered BU);
+  a plate's normal is its largest face. Holes are the round openings, clipped
+  to the part. Weight = Pset weight, else volume x 7850. Marks: `strict`
+  (BSA_Fabrication only) or `any` (Fabrication, Pset_SteelAssembly, Tekla,
+  AdvanceSteel, Identity Data, Tag, Name - the source is kept per part).
+- `hlr.py`, `views.py` - hidden-line views without OpenCASCADE (feature
+  edges + silhouettes, STRtree occlusion). FRONT, TOP when holes are on the
+  depth axis, a DETAIL per part mark whose holes neither shows. End depths
+  measured on a section through the solid, stepping past sloped cuts and
+  fused end plates.
+- `drafting.py`, `sheets.py` - sheets in paper mm: scale chosen from the
+  standard list and packed around material list / title block; running
+  dimensions (vertical text), hole gauges, balloons, plate details, hole
+  call-outs, DIMLFAC = scale; NC DXF (CUT/HOLE/TEXT) and DSTV nc1 per plate.
+- `gate_roundtrip.py` - **G3**: every sheet read back: R1 printed values vs
+  their own geometry (running dims and DIMENSIONs), R2 every tick on a
+  hole / part edge, R3 every hole drawn face-on, R4 tables = IFC qty and
+  weight, R5 inside the border, R6 overlaps (warning). Mutation-tested.
+- `run.py` - `python -m bimsteelauto.fabdraw.run MODEL.ifc OUT [--pdf]`:
+  G1, G2, extract, sheets, NC, G3, register, PDF books. Every sheet is drawn
+  NOT FOR ISSUE and re-stamped only when G1 + G3 (+ G2 under strict) pass.
+
+**Results.** JOB-018 (v2 ModelChain IFC): 35 assembly + 46 single-part
+sheets, 15 plate NC, two PDF books in 115 s; G1 PASS, G3 PASS (988 values,
+438 holes); NOT FOR ISSUE because G2 S5 finds 106 parts with empty holes
+(the bolts the model is short - a model finding, not a drawing one). Also
+run on Sample_Job (IFC4 and IFC2X3, `Fabrication` Pset: FOR APPROVAL) and
+ARMA_CPS (faceted breps, marks from Name). `tests/fabdraw/test_fabdraw_sheets.py`
+15 tests on the fixture (weights, frames, plate holes, detail dimensions,
+NC, G3 mutations); `tests/fabdraw` 70 passed.
+
+**Break lines** (same day, user asked): `views.set_breaks` cuts a long
+FRONT/TOP view between features (holes, attached parts, turns of the main
+part's outline), keeping 10 mm paper each side, closing each run to a 6 mm
+gap with a Z break line; runs under 30 mm are left and at most 75 % of a
+length goes. The scale search tries each scale whole, then shortened, and
+takes the first at which the views and every plate detail fit. Overall
+lengths over a break are written as text; G3 maps paper back through the
+breaks (`_unbreak`) before R1/R2/R3. JOB-018 R1a 1:25 -> 1:10, C1a 1:20 ->
+1:15, purlin single sheet 1:40 -> 1:20. `tests/fabdraw` 72 passed.
+
+**Not yet.** Slotted holes, weld symbols, grid-location table; DSTV face
+suffixes; columns drawn upright.
+
+**steel-project skill:** `run_chain.py` now calls the ifc-fab-drawings skill
+on the job IFC (`--fab-legacy` keeps the old script; backups `*.bak-2026-10-29`).
+
+## 0.13.0 - 2026-10-22 - the model is built by the v8 macro
+
+0.12.0 made the model clash-free, but it was still the adapter's own
+geometry: no holes in the members, plain anchors, girts and struts on
+invented clips, no strut connections. All of that already exists in the
+user's parametric macro `peb_building_param_v8` (10,000 lines, GUI-verified
+shop detailing). `build_all` now DRIVES THAT MACRO from the `DesignResult`.
+
+**New `bimsteelauto_fc/v8.py`.**
+
+- `frame_inputs(result)` - every `PEB_Frame` input the design sets: span,
+  eave level, bays, column and rafter plates (the rafter's straight taper
+  goes in the macro's profile table), end plates and their bolt set-out
+  (rows -40 / 46.0 / 607.2 / 693.2 on REF-2026-001, the same as EC1), base
+  plate and anchors, cleat, purlin / girt / strut sections and set-out,
+  braced bays, rods, gussets.
+- `build_v8(result)` - runs the macro's own `build()` with those inputs
+  applied as the frame is created. The macro is loaded WITHOUT its trailing
+  `build()` call, which otherwise builds the 24 m demo building on import.
+- `build_model_v8(result)` - splits the macro's per-side compounds into one
+  Arch object per piece, turns them into Layer 2's axes (a quarter turn and
+  a shift - never a mirror), and stamps the design's marks, weights and
+  utilisations. The macro's document is saved as `<job>_param.FCStd` (the
+  editable parametric model) and its report as `<job>_v8_report.txt`.
+- `build_all(..., geometry=None)`: v8 when the macro is found and the frame
+  is a single-span gable; the 0.12.0 builder otherwise, with a warning that
+  says why. `BSA_GEOMETRY=builtin|v8` overrides.
+
+**Where the design and the macro disagree** (approved 2026-10-21, printed in
+every build report as `choice 1..6`): grid on the outer column flange (the
+macro's span is base centreline to centreline); a built-up I eave strut is
+drawn as the RHS of the same envelope on the macro's tube detail, weight
+from the design; one roof X per slope to the design panel point; gussets
+sized to the rod and not designed; straight anchors as checked; no endwall.
+A roof-brace node is moved the least distance that clears the purlin
+cleats (REF-2026-001: +77 mm), and the move is reported.
+
+**Three changes in `peb_building_param_v8.py`** (with the user's OK;
+backups `*.bak-20261022` beside both copies; every change marked
+`BSA 2026-10-22`):
+
+1. Right-slope (and right-wall) rails were built upside down: `prism()`
+   takes the depth axis as axis x u and the right-hand bases are left
+   handed. Every right-slope Z sat in its cleat's seat leg (64 clashes on
+   REF-2026-001). Rails on a left-handed basis are now run from the far end.
+2. Lapped Z purlins occupied the same steel at every lap (221,710 mm3 each,
+   56 laps): the lap rule alternated the hand, which a Z cannot do. A lapped
+   Z now keeps one hand and the alternate bay is drawn as the NESTING half -
+   flange over the cleat 2t wider, the other 2t narrower, one thickness off
+   - so the pair wraps with every face touching. Same area, same mass.
+
+**Results.** REF-2026-001: 438 pieces, **0 clashes** from `clash_check.py`;
+492 macro solids checked one by one, 0. Jobs 16, 17, DEMO-2026-014,
+DEMO-2026-020, REF-2026-001-GF and the demo building: 0 each, nothing
+skipped. Member masses identical to 0.12.0; the take-off changes only where
+the macro's real plates replace the adapter's - REF-2026-001 8,762 -> 9,154
+kg: strut cleats, fins and caps (246 kg), an apex plate on each rafter,
+angle cleats and clips. Lengths are the built ones (rafter 6860, column
+3066), measured on the tight bounding box - the quick one is loose round
+the macro's lofted faces. `selftest` 69 -> 77 checks (v8: nothing skipped,
+every frame built, no clashes, grid on the outer flange, design masses,
+base plate and column flange drilled). Suite **1028 passed, 1 skipped,
+3 xfailed**.
+
+3. (2026-10-22, also with the user's OK) The column stopped at the eave, so
+   an EXTENDED eaves plate - EC1 stands 64 mm above the flange with a bolt
+   row 40 above it - had nothing behind its top row. A flush eaves column
+   now runs up to the top of the plate (`EP_ext_top_eaves`), and every row
+   is drilled through the inner flange. REF-2026-001: column 3066 -> 3130,
+   holes at 2371 / 2457 / 3020 / 3106 matching the plate; still 0 clashes.
+   A flush-topped plate builds exactly as before.
+
+**Not modelled.** The macro draws a rod brace as a square bar of the rod
+diameter; bolts are holes, not fasteners.
+
 ## 0.12.0 - 2026-10-21 - the FreeCAD model is clash-free
 
 The adapter used to build a **centreline model**: every solid on its

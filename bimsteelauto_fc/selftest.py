@@ -615,6 +615,78 @@ def run(json_path: str, out_dir: str) -> int:
               counts.get("IfcColumn", 0) == n_frames * 2,
               f"{counts.get('IfcColumn', 0)} vs {n_frames * 2}")
 
+    # ---- the v8 macro --------------------------------------------------
+    #
+    # build_all's default geometry. It runs here only when the macro is on
+    # this machine; a checkout without it says so instead of passing quietly.
+    print("v8 macro")
+    from bimsteelauto_fc import v8 as _v8
+    try:
+        _v8.find_macro()
+        have_v8 = True
+    except _v8.MacroNotFound as exc:
+        have_v8 = False
+        print(f"  ....  {exc} - the v8 checks did not run", flush=True)
+    if have_v8:
+        from bimsteelauto_fc.clash import hard_clashes as _hc
+
+        r8 = _v8.build_model_v8(result, document_name="selftest_v8")
+        o8 = r8.objects
+        check("v8: every piece was carried into the model - nothing skipped",
+              not r8.skipped and not any("not mapped" in w
+                                         for w in r8.warnings),
+              "; ".join([f"{m}: {w}" for m, w in r8.skipped[:2]]
+                        + [w for w in r8.warnings if "not mapped" in w][:2]))
+        n_cols = len([o for o in o8 if str(o.MemberType) == "column"])
+        n_rafs = len([o for o in o8 if str(o.MemberType) == "rafter"])
+        check("v8: two columns and two rafters on every frame line",
+              n_cols == 2 * n_frames and n_rafs == 2 * n_frames,
+              f"{n_cols} columns, {n_rafs} rafters, {n_frames} frames")
+        cl8 = _hc(o8)
+        check("v8: the model has no hard clashes (> 50 mm3)", not cl8,
+              f"{len(cl8)}: " + "; ".join(str(c) for c in cl8[:4]))
+        by8 = {str(o.Mark): o for o in o8}
+        c1, c2 = by8.get("C1-F1"), by8.get("C2-F1")
+        check("v8: the grid is on the outer face of the column flanges",
+              c1 is not None and c2 is not None
+              and abs(c1.Shape.BoundBox.XMin) < 0.5
+              and abs(c2.Shape.BoundBox.XMax - g.width) < 0.5,
+              f"C1 at {getattr(c1, 'Shape', None) and c1.Shape.BoundBox.XMin}"
+              f", C2 at {getattr(c2, 'Shape', None) and c2.Shape.BoundBox.XMax}")
+        design_col = next(m for m in result.members
+                          if m.member_type is MemberType.COLUMN)
+        check("v8: a column's scheduled mass is the design's",
+              c1 is not None and close(float(c1.Weight_kg), col.taper.weight,
+                                       1e-6),
+              f"{getattr(c1, 'Weight_kg', 0):.1f} vs {col.taper.weight:.1f} "
+              f"({design_col.mark})")
+        pu = next((m for m in result.members
+                   if m.member_type is MemberType.PURLIN), None)
+        if pu is not None:
+            runs = 2 * int(_v8.frame_inputs(result)[0].get("PU_count", 0))
+            got = sum(float(o.Weight_kg) for o in o8
+                      if str(o.MemberType) == "purlin")
+            check("v8: the purlins weigh the design's runs",
+                  close(got, pu.weight * runs, 1e-6),
+                  f"{got:.1f} vs {runs} x {pu.weight:.1f}")
+
+        def holes(o):
+            return sum(1 for f in o.Shape.Faces
+                       if "Cylinder" in str(f.Surface))
+
+        bp8 = next((o for o in o8 if str(o.MemberType) == "base_plate"), None)
+        bp_conn = next((c for c in with_geom
+                        if geometry_of(c)["kind"] == "base_plate"), None)
+        if bp8 is not None and bp_conn is not None:
+            n_a = int(geometry_of(bp_conn).get("n_anchors", 0))
+            check("v8: the base plate is drilled for every anchor",
+                  holes(bp8) >= n_a > 0, f"{holes(bp8)} holes, {n_a} anchors")
+        check("v8: the column flange is drilled for the eaves bolts",
+              c1 is not None and holes(c1) > 0,
+              f"{holes(c1) if c1 is not None else 0} holes in C1-F1")
+        App.closeDocument(r8.document.Name)
+        App.closeDocument(r8.param_document.Name)
+
     print("-" * 60, flush=True)
     if _FAILURES:
         print(f"{_PASSED} passed, {len(_FAILURES)} FAILED", flush=True)
