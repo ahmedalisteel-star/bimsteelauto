@@ -34,7 +34,7 @@ import pathlib
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-for _p in (HERE, HERE / "vendor"):
+for _p in (HERE, HERE / "vendor", HERE / "vendor" / "cfs"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

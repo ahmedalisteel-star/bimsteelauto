@@ -51,6 +51,7 @@ import time
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "vendor"))
+sys.path.insert(0, str(HERE / "vendor" / "cfs"))
 
 from bimsteelauto.analysis import (  # noqa: E402
     build_space_contours,

@@ -11,3 +11,5 @@ Claude outputs/
 job_*.py
 *.log
 design_result.json
+calc_sheet.html
+contours.json

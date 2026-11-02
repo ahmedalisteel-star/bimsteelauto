@@ -25,7 +25,10 @@ import pytest
 
 PEB = pathlib.Path(__file__).resolve().parent.parent
 FC_PKG = PEB / "bimsteelauto_fc"
-WB = PEB.parent / "BIMSteelAutoWB"
+# repo layout (workbench inside the repo) first, then the older layout
+# with the workbench beside the peb folder
+WB = next((p for p in (PEB / "BIMSteelAutoWB", PEB.parent / "BIMSteelAutoWB")
+           if p.is_dir()), PEB / "BIMSteelAutoWB")
 
 #: Where FreeCAD lives on a Windows install.  Extend rather than replace -
 #: a machine that puts it elsewhere should still find it.

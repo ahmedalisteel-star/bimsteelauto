@@ -72,7 +72,7 @@ cmd /c mklink /J "$env:APPDATA\FreeCAD\Mod\BIMSteelAutoWB" "<your-folder>\bimste
 cd "<your-folder>\bimsteelauto"; python -m pytest -q
 ```
 
-Expect **858 passed, 1 skipped, 3 xfailed**. The skip and the three xfails
+Expect **over 1,000 passed, a few skipped, 3 xfailed**. The skips and the three xfails
 are deliberate and documented — they are not faults.
 
 ---

@@ -48,6 +48,7 @@ this module is provisional.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
@@ -893,7 +894,10 @@ def _dispatch_flexure(flexural_strength, member, basis, kwargs: dict[str, Any]):
             return flexural_strength(member, basis=basis, **remaining)
         except TypeError as exc:
             msg = str(exc)
-            dropped = [k for k in remaining if f"'{k}'" in msg and "unexpected" in msg]
+            # Only the name right after "unexpected keyword argument" - Python
+            # 3.13+ appends "Did you mean 'x'?", and x must not be dropped too.
+            hit = re.search(r"unexpected keyword argument '([^']+)'", msg)
+            dropped = [hit.group(1)] if hit and hit.group(1) in remaining else []
             if not dropped:
                 raise
             for k in dropped:

@@ -66,16 +66,32 @@ Outputs in `jobs/<JOB_NUMBER>/out/`: the `.FCStd` BIM model, `.ifc`,
 DXF. The workbench's **Result contours** command draws displacement,
 stress and utilisation on the model.
 
+## 4b. Gated fabrication drawings (when the user asks for shop drawings)
+
+Run stage 5 on the IFC the build wrote:
+
+```powershell
+python -m bimsteelauto.fabdraw.run jobs/<JOB_NUMBER>/out/<JOB_NUMBER>.ifc jobs/<JOB_NUMBER>/fabdraw --pdf --prefix <JOB_NUMBER>-
+```
+
+It runs gates G1 (clash), G2 (IDS data) and G3 (every sheet read back
+against the IFC). Report each gate's result from `fabdraw_report.json`.
+A sheet stays **NOT FOR ISSUE** unless the gates pass - never edit the
+sheets or the gates to make it pass; fix the model and run again.
+
 ## 5. Report back
 
 Give the user: the governing utilisation per member, total steel tonnage
-from the MTO, clash count (must be 0), whether any sheet says
-**NOT FOR ISSUE**, every assumption you made, and where the files are.
+from the MTO, clash count (must be 0), the G1/G2/G3 gate results if
+fabrication drawings were made, whether any sheet says **NOT FOR ISSUE**,
+every assumption you made, and where the files are.
 
 ## Rules
 
 - Never edit `bimsteelauto/`, `bimsteelauto_connections/` or
   `bimsteelauto_fc/` to make a member pass. Change the job file.
+- Never edit `bimsteelauto/fabdraw/` or `fabrication_ready.ids` to make a
+  gate pass. A failed gate means the model is wrong.
 - Never set a `VERIFIED` flag to True. Those flags are closed only by a
   match against an independent tool, recorded in `tests/fixtures/`.
 - If the program refuses an input, report the refusal; do not work around

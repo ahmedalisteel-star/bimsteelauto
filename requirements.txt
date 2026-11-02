@@ -34,3 +34,6 @@ ifcopenshell==0.8.5
 ifcclash==0.8.5
 ifctester==0.8.5
 ezdxf==1.4.4
+shapely==2.2.0
+# only for --pdf (assembly / single-part PDF books)
+pymupdf==2.0
