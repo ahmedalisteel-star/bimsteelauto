@@ -1,0 +1,63 @@
+# Packaging for BIMSteelAuto, so other projects can depend on it with pip or uv:
+#
+#     uv add "bimsteelauto @ git+https://github.com/ahmedalisteel-star/bimsteelauto@<commit>"
+#     pip install "bimsteelauto[fabdraw] @ git+https://github.com/ahmedalisteel-star/bimsteelauto@<commit>"
+#
+# It packages what this repository already holds and nothing else: the engine (bimsteelauto), the connection
+# layer (bimsteelauto_connections) and the vendored cold-formed library (vendor/cfs/aisi_s100.py and
+# direct_strength.py, installed as top-level modules because bimsteelauto.design.purlins imports them by those
+# names). The FreeCAD adapter, the workbench, the CLI and the tests are not packaged; running from a clone with
+# requirements.txt works exactly as before.
+#
+# Pins are the ones the verified test run used (requirements.txt).
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bimsteelauto"
+dynamic = ["version"]
+description = "PEB / steel engineering engine: tapered built-up frames, ASCE 7 loads, PyNite analysis, AISC 360 and AISI S100 design, connections."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ahmed Ali" }]
+requires-python = ">=3.11"
+dependencies = [
+    "PyNiteFEA==3.0.0",
+    "numpy==2.5.1",
+    "scipy==1.18.0",
+    "pyaisc360 @ git+https://github.com/ahmedalisteel-star/pyaisc360.git@007a3f6f47ceaacf28b5f4da479a38bff8d7eb30",
+]
+
+[project.optional-dependencies]
+# Stage 5 fabdraw (IFC -> gated fabrication drawings). Pinned together: see requirements.txt.
+fabdraw = [
+    "ifcopenshell==0.8.5",
+    "ifcclash==0.8.5",
+    "ifctester==0.8.5",
+    "ezdxf==1.4.4",
+    "shapely==2.2.0",
+    "pymupdf==2.0",
+]
+
+[project.urls]
+Source = "https://github.com/ahmedalisteel-star/bimsteelauto"
+
+[tool.hatch.version]
+path = "bimsteelauto/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["bimsteelauto", "bimsteelauto_connections"]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"vendor/cfs/aisi_s100.py" = "aisi_s100.py"
+"vendor/cfs/direct_strength.py" = "direct_strength.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["bimsteelauto", "bimsteelauto_connections", "vendor/cfs/aisi_s100.py", "vendor/cfs/direct_strength.py", "LICENSE", "README.md", "pyproject.toml"]
