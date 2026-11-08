@@ -113,6 +113,7 @@ __all__ = [
     "in_plane_buckling",
     "out_of_plane_buckling",
     "equivalent_unbraced_length",
+    "flange_height",
 ]
 
 #: All False: no independent source for the APPLICATION yet (DG 25 is to be
@@ -128,6 +129,17 @@ VERIFIED: dict[str, bool] = {
 
 #: Shear modulus, MPa (AISC 360-16 Sect. B: G = 77 200 MPa).
 G_STEEL = 77_200.0
+
+#: A point restraint is a spring of PENALTY x E Iy / L^3 of the segment
+#: (rigid for practical purposes; the test against the half-length closed
+#: form fixes the tolerance).  Scaled on the physical lateral stiffness, not
+#: on K's diagonal: the dofs mix mm and radians, and a penalty taken from the
+#: largest diagonal ill-conditions the eigenproblem.
+PENALTY = 1.0e6
+#: Sideways movement of a point e above the shear centre = u + RESTRAINT_SIGN
+#: e phi, in this module's convention for phi.  Pinned by the physics test:
+#: restraining the COMPRESSION flange must help more than the tension flange.
+RESTRAINT_SIGN = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +230,7 @@ def _hermite(xi: np.ndarray, h: float):
     return N, d1, d2
 
 
-def _solve_fe(coef: _Coef, a: float, b: float, n: int) -> float:
+def _solve_fe(coef: _Coef, a: float, b: float, n: int, restraints=()) -> float:
     gp, gw = np.polynomial.legendre.leggauss(4)
     h = (b - a) / n
     xi = 0.5 * (gp + 1.0)
@@ -246,6 +258,15 @@ def _solve_fe(coef: _Coef, a: float, b: float, n: int) -> float:
     Gm = np.zeros((ndof, ndof))
     np.add.at(K, (idx[:, :, None], idx[:, None, :]), ke)
     np.add.at(Gm, (idx[:, :, None], idx[:, None, :]), ge)
+    if restraints:
+        k = PENALTY * coef(0.5 * (a + b))[0] / (b - a) ** 3          # x the segment's E Iy / L^3
+        for x, e in restraints:
+            el = min(int((x - a) / h), n - 1)
+            Nx, _, _ = _hermite(np.array([(x - a) / h - el]), h)
+            c = np.zeros(ndof)
+            c[idx[el, :4]] = Nx[0]
+            c[idx[el, 4:]] = RESTRAINT_SIGN * e * Nx[0]
+            K += k * np.outer(c, c)
     fixed = {0, 2, 4 * n, 4 * n + 2}                                 # u = phi = 0 at both ends
     free = np.array([i for i in range(ndof) if i not in fixed])
     return _lowest_positive(K[np.ix_(free, free)], Gm[np.ix_(free, free)])
@@ -256,7 +277,7 @@ def _solve_fe(coef: _Coef, a: float, b: float, n: int) -> float:
 # ---------------------------------------------------------------------------
 
 
-def _solve_ritz(coef: _Coef, a: float, b: float, n: int) -> float:
+def _solve_ritz(coef: _Coef, a: float, b: float, n: int, restraints=()) -> float:
     L = b - a
     gp, gw = np.polynomial.legendre.leggauss(8)
     pieces = max(32, 4 * n)
@@ -282,6 +303,12 @@ def _solve_ritz(coef: _Coef, a: float, b: float, n: int) -> float:
     cross = blk(C[:, 4], F1, F1) - blk(C[:, 6], F2, F0)
     Gm[:n, n:] = cross
     Gm[n:, :n] = cross.T
+    if restraints:
+        k = PENALTY * coef(0.5 * (a + b))[0] / (b - a) ** 3          # x the segment's E Iy / L^3
+        for x, e in restraints:
+            sx = np.sin(t * (x - a))
+            c = np.concatenate([sx, RESTRAINT_SIGN * e * sx])
+            K += k * np.outer(c, c)
     return _lowest_positive(K, Gm)
 
 
@@ -297,13 +324,14 @@ def _lowest_positive(K: np.ndarray, Gm: np.ndarray) -> float:
     return math.inf if top <= 1e-14 * max(1.0, float(np.max(np.abs(mu)))) else 1.0 / top
 
 
-def _solve(coef, a, b, method, n):
+def _solve(coef, a, b, method, n, restraints=()):
     if b <= a:
         raise ValueError(f"segment must have positive length, got [{a}, {b}]")
+    restraints = tuple((x, e) for x, e in restraints if a + 1e-6 < x < b - 1e-6)
     if method == "fe":
-        return _solve_fe(coef, a, b, n or 16)
+        return _solve_fe(coef, a, b, n or 16, restraints)
     if method == "ritz":
-        return _solve_ritz(coef, a, b, n or 16)
+        return _solve_ritz(coef, a, b, n or 16, restraints)
     raise ValueError(f"method must be 'fe' or 'ritz', got {method!r}")
 
 
@@ -320,14 +348,25 @@ def in_plane_buckling(section_at: Callable[[float], WeldedI], P: Callable[[float
 
 def out_of_plane_buckling(section_at: Callable[[float], WeldedI], a: float, b: float, *,
                           P: Callable[[float], float] | None = None, M: Callable[[float], float] | None = None,
-                          E: float = E_STEEL, G: float = G_STEEL, method: str = "fe", n: int | None = None) -> float:
+                          E: float = E_STEEL, G: float = G_STEEL, method: str = "fe", n: int | None = None,
+                          restraints: Sequence[tuple[float, float]] = ()) -> float:
     """lambda_cr for out-of-plane (flexural-torsional / lateral-torsional) buckling of [a, b].
 
     P in N (compression +), M in N.mm (+ = top flange in compression).  Ends
-    simply supported for u and phi, free to warp.
+    simply supported for u and phi, free to warp.  ``restraints``: interior
+    lateral restraints as (x, e) - rigid against sideways movement of the
+    point e mm ABOVE the shear centre (a purlin on the top flange: e =
+    flange_height(section, "top")); modelled by a penalty in both methods.
     """
     zero = lambda x: 0.0  # noqa: E731
-    return _solve(_out_of_plane_coef(section_at, P or zero, M or zero, E, G), a, b, method, n)
+    return _solve(_out_of_plane_coef(section_at, P or zero, M or zero, E, G), a, b, method, n, restraints)
+
+
+def flange_height(s: WeldedI, which: str) -> float:
+    """Height of a flange's centroid above the shear centre, mm (negative for the bottom flange)."""
+    if which == "top":
+        return s.ho * s.Iyt / (s.Iyc + s.Iyt)
+    return -s.ho * s.Iyc / (s.Iyc + s.Iyt)
 
 
 # ---------------------------------------------------------------------------

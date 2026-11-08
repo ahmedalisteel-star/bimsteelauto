@@ -124,7 +124,7 @@ def test_tapered_column_chain_longhand():
                                        bracing=BracingSpec(), materials=MAT, stability="dg25"), _steel(MAT))
     ctx.bind("c", sts)
     from pyaisc360 import Basis
-    c = ctx.compression(st, s, 0.0, 2000.0, E_KSI, FY, Basis.LRFD)
+    c = ctx.compression(st, s, 0.0, 2000.0, "top", E_KSI, FY, Basis.LRFD)
     assert c.capacity == pytest.approx(expected, rel=1e-6)
     # the taper is in it: in plane the tapered column is far from a prismatic one of the deep-end section
     lx = in_plane_buckling(T.at, P, 0.0, L, E=E)
@@ -152,3 +152,25 @@ def test_refusals():
         _run(pr, sts, 3000.0, "dg25", K_in_plane=1.2)
     with pytest.raises(DesignError, match="stability must be"):
         _run(pr, sts, 3000.0, "dg-25")
+
+
+def test_other_flange_restraints_inside_a_segment():
+    """A rafter-like beam: hogging at the knee (bottom flange compressed), sagging further on (top compressed). The
+    bottom flange is braced at 600 mm and at the ends only; the top flange at purlins every 1250 mm. With the purlins
+    inside the long bottom-flange segment modelled, the sagging part can no longer buckle sideways through them: the
+    utilisations along that segment drop. Switched off, it is the bare segment (the earlier behaviour).
+    Measured 2026-11-08 at x = 1000 / 3000 mm: prismatic 0.323 / 0.102, dg25 bare 0.276 / 0.229, with purlins 0.237 / 0.129."""
+    from bimsteelauto.design.members import station_utilisations
+    L = 10000.0
+    pr = TaperedMember(start=SEC, end=SEC, length=L)
+    sts = [MemberForces(P=0.0, Vy=1.0, Mz=-300.0 + 600.0 * (i / 20) * (1.6 - i / 20), station=L * i / 20) for i in range(21)]
+    br = BracingSpec(top_flange=tuple(1250.0 * k for k in range(1, 8)), bottom_flange=(600.0,))
+
+    def run(**kw):
+        return station_utilisations(MemberDesignInput(mark="R", member_type=MemberType.RAFTER, taper=pr, forces={"c": sts},
+                                                      bracing=br, materials=MAT, stability="dg25", **kw), "c")
+    with_p, bare = run(), run(dg25_other_flange=False)
+    for k in range(2, 9):                                                  # x = 1000 ... 4000 mm: the long bottom segment
+        assert with_p[k] < bare[k], k
+    assert with_p[6] < 0.7 * bare[6]                                      # where the bare segment's buckling dominates
+    assert with_p[:2] == bare[:2]                                         # the short segment has nothing inside it

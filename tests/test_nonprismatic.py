@@ -150,3 +150,55 @@ def test_equivalent_unbraced_length_inverts_the_aisc_form(j_term):
     r, Lb = 55.0, 4200.0
     Fe = math.pi ** 2 * E / (Lb / r) ** 2 * math.sqrt(1 + 0.078 * j_term * (Lb / r) ** 2)
     assert equivalent_unbraced_length(Fe, r, j_term=j_term) == pytest.approx(Lb, rel=1e-9)
+
+
+# ---------------------------------------------------------------- point restraints (purlins / flange braces inside a segment)
+
+def _me_sym(L):
+    return math.pi / L * math.sqrt(E * SYM.Iy * G * SYM.J + (math.pi * E / L) ** 2 * SYM.Iy * SYM.Cw)
+
+
+@pytest.mark.parametrize("method", METHODS)
+def test_restraint_at_the_shear_centre_halves_the_length(method):
+    from bimsteelauto.design.nonprismatic import flange_height  # noqa: F401
+    L = 6000.0
+    lam = out_of_plane_buckling(lambda x: SYM, 0.0, L, M=UNIT, method=method, restraints=[(L / 2, 0.0)])
+    assert lam == pytest.approx(_me_sym(L / 2), rel=1e-3)
+    # axial: sideways held at midspan, twist free - min(weak-axis Euler over L/2, torsional over L)
+    p = stability_properties(SYM)
+    Pey = math.pi ** 2 * E * SYM.Iy / (L / 2) ** 2
+    Pez = (math.pi ** 2 * E * SYM.Cw / L ** 2 + G * SYM.J) / p.ro2
+    lam = out_of_plane_buckling(lambda x: SYM, 0.0, L, P=UNIT, method=method, restraints=[(L / 2, 0.0)])
+    assert lam == pytest.approx(min(Pey, Pez), rel=1e-3)
+
+
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("sign", [1.0, -1.0])
+def test_compression_flange_restraint_works_tension_flange_barely(method, sign):
+    """Physics pins the sign convention: holding the COMPRESSION flange at midspan is (nearly) a full brace; holding the
+    tension flange adds little.  If the restraint were applied at the mirrored point the two would swap."""
+    from bimsteelauto.design.nonprismatic import flange_height
+    L = 6000.0
+    comp, tens = ("top", "bottom") if sign > 0 else ("bottom", "top")
+    M = lambda x: sign * 1.0
+    free = out_of_plane_buckling(lambda x: SYM, 0.0, L, M=M, method=method)
+    c = out_of_plane_buckling(lambda x: SYM, 0.0, L, M=M, method=method, restraints=[(L / 2, flange_height(SYM, comp))])
+    t = out_of_plane_buckling(lambda x: SYM, 0.0, L, M=M, method=method, restraints=[(L / 2, flange_height(SYM, tens))])
+    assert free <= t < 1.05 * free
+    assert c == pytest.approx(_me_sym(L / 2), rel=1e-3) and c > 3 * t
+
+
+def test_penalty_does_not_matter(monkeypatch):
+    import bimsteelauto.design.nonprismatic as npm
+    from bimsteelauto.design.nonprismatic import flange_height
+    L = 6000.0
+    args = dict(M=lambda x: 1.0 - 1.5 * x / L, restraints=[(1500.0, flange_height(SYM, "top")), (4500.0, flange_height(SYM, "top"))])
+    vals = []
+    for pen in (1e4, 1e6, 1e8):                     # 1e6 is the module's value; 1e4 is a visibly soft spring
+        monkeypatch.setattr(npm, "PENALTY", pen)
+        vals.append((out_of_plane_buckling(lambda x: SYM, 0.0, L, method="fe", **args),
+                     out_of_plane_buckling(lambda x: SYM, 0.0, L, method="ritz", **args)))
+    (fe4, r4), (fe6, r6), (fe8, r8) = vals
+    assert fe6 == pytest.approx(fe8, rel=1e-4) and r6 == pytest.approx(r8, rel=1e-4)     # rigid by 1e6
+    assert fe4 < fe6 and fe4 == pytest.approx(fe6, rel=1e-2)                             # softer spring, lower load
+    assert fe6 == pytest.approx(r6, rel=5e-3)                                            # the two methods agree
