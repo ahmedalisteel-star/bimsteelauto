@@ -37,6 +37,17 @@ longhand from the plate dimensions.
 New coverage gap recorded: a singly-symmetric section's compression uses the
 doubly symmetric E4 branch (yo not passed).
 
+**Also verified longhand** (`tests/test_slender_web_flexure_shear.py`): the
+2026-09-01 verification compared a compact (F2) section only. Now thin webs
+are checked as well:
+- F4 on h/tw = 97 (Rpc, FLB F4-13, LTB F4-2/F4-3);
+- F5 on h/tw = 163 (Rpg, FLB F5-8, LTB F5-3/F5-4);
+- G2.1 shear buckling without tension field (Cv1 0.63 and 0.38, phi 0.90).
+
+Every one is within 0.2 % in all three Lb zones. VERIFIED gains
+compression_E7, flexure_F4_noncompact_web, flexure_F5_slender_web and
+shear_G2_1_web_buckling.
+
 ## 0.14.2 - 2026-11-08 - ModelSettings: stiffness_factor and min_segments
 
 Two modelling settings, both defaulting to the old behaviour (nothing changes

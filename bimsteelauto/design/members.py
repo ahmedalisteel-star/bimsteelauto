@@ -162,6 +162,24 @@ VERIFIED: dict[str, bool] = {
     "shear_G6_weak": True,
     "torsion_H3_stvenant": True,
     "interaction_H1_biaxial": True,
+    # Added 2026-11-08 (0.14.3): thin PEB webs, closed by longhand clause
+    # arithmetic from the plate dimensions (no pyaisc360 call) in
+    # tests/test_e7_slender.py and tests/test_slender_web_flexure_shear.py.
+    #
+    #     compression_E7       Ae = Ag - sum (b - be) t on the web and each
+    #                          flange, Eqs. E7-2/3/4/5; h/tw 97 loses 28 %
+    #                          (negative control); the E7-2 threshold keeps
+    #                          a long column's full area
+    #     flexure_F4_noncompact_web   h/tw 97: Rpc, FLB F4-13, LTB F4-2 and
+    #                          F4-3 (all three Lb zones) within 0.2 %
+    #     flexure_F5_slender_web      h/tw 163: Rpg, FLB F5-8, LTB F5-3 and
+    #                          F5-4 within 0.2 %; well below Mp
+    #     shear_G2_1_web_buckling     Cv1 < 1 (G2-4), kv 5.34, phi 0.90,
+    #                          no tension field; below 0.6 Fy Aw
+    "compression_E7": True,
+    "flexure_F4_noncompact_web": True,
+    "flexure_F5_slender_web": True,
+    "shear_G2_1_web_buckling": True,
 }
 
 #: Things this module does NOT do.  Distinct from VERIFIED: a gap is a check
