@@ -141,6 +141,15 @@ ENGINE_MODULES: tuple[str, ...] = (
 )
 
 
+#: Gated modules this pipeline does NOT call: their flags are not on its sheet,
+#: because nothing they compute is.  A caller that opts in carries them itself -
+#: design.nonprismatic (MemberDesignInput.stability = "dg25") marks every check
+#: it produces "NOT VERIFIED".  Listed so the gate scan still accounts for them.
+OPT_IN_MODULES: tuple[str, ...] = (
+    "bimsteelauto.design.nonprismatic",
+)
+
+
 def open_verification_flags() -> tuple[str, ...]:
     """Every VERIFIED flag still False, across the whole engine."""
     out: list[str] = []

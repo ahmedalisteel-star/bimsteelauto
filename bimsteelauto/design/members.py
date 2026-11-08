@@ -186,9 +186,10 @@ VERIFIED: dict[str, bool] = {
 #: that is absent, not a formula that is unchecked.  Both block issue, but
 #: they are closed in different ways and must not be confused.
 COVERAGE_GAPS: tuple[str, ...] = (
-    "Web-tapered stability per AISC Design Guide 25 is not implemented; "
-    "tapered members are checked station-wise as prismatic, which is "
-    "conservative for LTB.",
+    "Web-tapered stability per AISC Design Guide 25: available since 0.15.0 "
+    "as stability='dg25' (design/nonprismatic.py), NOT VERIFIED - the "
+    "application is to be confirmed against the printed guide. The default "
+    "(stability='prismatic') checks each station as a prismatic member.",
     "Direct Analysis Method stiffness reduction (0.8 tau_b EI) and notional "
     "loads are not applied in the analysis, so K = 1.0 in plane is not yet "
     "fully justified.",
@@ -286,6 +287,11 @@ class MemberDesignInput:
     #: In-plane effective length factor.  1.0 under the Direct Analysis
     #: Method; stated here rather than assumed inside the check.
     K_in_plane: float = 1.0
+    #: "prismatic" (default): each station checked as a prismatic member of
+    #: its own section.  "dg25": compression and LTB from the member's own
+    #: elastic buckling loads (design/nonprismatic.py, the AISC Design Guide 25
+    #: approach) - NOT VERIFIED, opt-in, see nonprismatic.VERIFIED.
+    stability: str = "prismatic"
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +429,7 @@ def check_member(inp: MemberDesignInput) -> MemberDesign:
     basis = Basis.LRFD if inp.method is DesignMethod.LRFD else Basis.ASD
     steel = _steel(inp.materials)
     L = inp.taper.length
+    dg25 = _stability_context(inp, steel)
 
     worst_ratio = -1.0
     worst: dict[str, Any] | None = None
@@ -430,6 +437,8 @@ def check_member(inp: MemberDesignInput) -> MemberDesign:
     for combo, stations in inp.forces.items():
         if not stations:
             continue
+        if dg25 is not None:
+            dg25.bind(combo, stations)
         for st in stations:
             section = inp.taper.at(min(max(st.station, 0.0), L))
             result = _check_station(
@@ -449,6 +458,7 @@ def check_member(inp: MemberDesignInput) -> MemberDesign:
                     shear_strength,
                     combined_axial_flexure,
                 ),
+                dg25=dg25,
             )
             ratio = max((c.ratio for c in result), default=0.0)
             if ratio > worst_ratio:
@@ -462,6 +472,11 @@ def check_member(inp: MemberDesignInput) -> MemberDesign:
 
     if worst is None:
         raise DesignError(f"member {inp.mark} has no force results to check")
+
+    if dg25 is not None:
+        worst["checks"] = dg25.cross_check(worst, inp, steel, basis, (
+            CompressionMember, compressive_strength, FlexuralMember, ShapeType,
+            flexural_strength, ShearMember, shear_strength, combined_axial_flexure))
 
     return MemberDesign(
         mark=inp.mark,
@@ -537,6 +552,7 @@ def _check_station(
     steel,
     basis,
     classes,
+    dg25: "_Stability | None" = None,
 ) -> list[MemberCheck]:
     (
         CompressionMember,
@@ -657,15 +673,31 @@ def _check_station(
         Iyc_over_Iy=Iyc / section.Iy,
     )
     f_res = _dispatch_flexure(flexural_strength, fm, basis, section_kwargs)
+    f_note = f"Lb = {Lb:.0f} mm ({which} flange), Cb = {Cb:.3f}"
+    f_ref = _cite(f_res)
+    if dg25 is not None:
+        # DG 25 approach (NOT VERIFIED): Fe,LTB = gamma_LTB * fr at THIS
+        # station, turned into the Lb that gives the same elastic LTB stress
+        # in the section's own Chapter F equation, then Chapter F with Cb = 1
+        # (the moment gradient is inside gamma_LTB).
+        gam = dg25.ltb(a, b)
+        fr = abs(st.Mz) * 1.0e6 / Sxc                                  # MPa
+        Lb_eq, how, kappa = dg25.equivalent_lb(f_res, section, comp_flange, gam * fr if fr > 0 else math.inf, Lb)
+        fm = FlexuralMember(section=adapted, steel=steel, shape=ShapeType.BUILT_UP_I,
+                            Lb=mm_to_in(Lb_eq), Cb=1.0)
+        f_res = _dispatch_flexure(flexural_strength, fm, basis, section_kwargs)
+        f_ref = f"{_cite(f_res)}; LTB by the AISC Design Guide 25 approach (NOT VERIFIED)"
+        f_note = (f"DG 25: segment {a:.0f}-{b:.0f} mm ({which} flange), gamma_LTB = {gam:.3f} "
+                  f"({dg25.method}), Fe,LTB = {gam * fr:.0f} MPa x kappa {kappa:.3f}, Lb,eq = {Lb_eq:.0f} mm by {how}, Cb = 1")
     Mc = kipin_to_knm(f_res.available)
     checks.append(
         _mk(
             f"Flexure ({f_res.governing.limit_state.value})",
-            _cite(f_res),
+            f_ref,
             abs(st.Mz),
             Mc,
             "kN.m",
-            note=f"Lb = {Lb:.0f} mm ({which} flange), Cb = {Cb:.3f}",
+            note=f_note,
         )
     )
 
@@ -825,6 +857,9 @@ def _check_station(
             Lcy=mm_to_in(Lcy),
         )
         e_res = compressive_strength(cm, basis=basis)
+        if dg25 is not None:
+            checks.append(dg25.compression(st, section, a, b, E_ksi, Fy_ksi, basis))
+            Pc_kn = checks[-1].capacity
         # Sect. E7 (fix/e7-slender, 2026-11-08).  pyaisc360 applies E7 only to
         # the plate elements it is given, and a bare CompressionMember gives it
         # none - it then takes every element as nonslender, which overstated
@@ -833,6 +868,7 @@ def _check_station(
         # (Table B4.1a case 2 needs h/tw for kc, and it does not pass it), so
         # the deduction is made here with the library's E7 primitives, element
         # by element, at the governing Fcr of the run above (whose Ae = Ag).
+    if st.P > 0.0 and dg25 is None:
         Ag_in = mm2_to_in2(section.A)
         Fcr = min(ls.nominal for ls in e_res.limit_states) / Ag_in
         Ae_in, e7 = _e7_effective_area(section, E_ksi, Fy_ksi, Fcr)
@@ -916,6 +952,150 @@ def _check_station(
         )
 
     return checks
+
+
+def _stability_context(inp: MemberDesignInput, steel) -> "_Stability | None":
+    if inp.stability == "prismatic":
+        return None
+    if inp.stability != "dg25":
+        raise DesignError(f"stability must be 'prismatic' or 'dg25', got {inp.stability!r}")
+    if not math.isclose(inp.K_in_plane, 1.0):
+        raise DesignError(
+            "stability='dg25' takes the in-plane buckling of the member itself, pinned at its ends "
+            f"(K = 1, the Direct Analysis Method); K_in_plane = {inp.K_in_plane} has no meaning there"
+        )
+    return _Stability(inp, steel)
+
+
+class _Stability:
+    """Elastic buckling loads of the member for one combination, cached per segment.
+
+    NOT VERIFIED - see :mod:`.nonprismatic`.  Production uses the finite
+    element method; the governing station is re-run with the Ritz method and
+    the two capacities are compared in its notes (two independent methods).
+    E and G are pyaisc360's (29 000 / 11 200 ksi), so a prismatic member gives
+    exactly the Chapter E / F elastic values.
+    """
+
+    def __init__(self, inp: MemberDesignInput, steel, method: str = "fe") -> None:
+        self.inp = inp
+        self.E = ksi_to_mpa(steel.E)
+        self.G = ksi_to_mpa(steel.G)
+        self.method = method
+        self._cache: dict[tuple, float] = {}
+
+    def bind(self, combo: str, stations) -> None:
+        from .nonprismatic import piecewise
+
+        self.combo = combo
+        xs = [s.station for s in stations]
+        self.P = piecewise(xs, [s.P * 1.0e3 for s in stations])        # N, compression +
+        self.M = piecewise(xs, [s.Mz * 1.0e6 for s in stations])       # N.mm, + top compressed
+
+    def _get(self, key, f):
+        key = (self.combo, self.method) + key
+        if key not in self._cache:
+            self._cache[key] = f()
+        return self._cache[key]
+
+    def in_plane(self) -> float:
+        from .nonprismatic import in_plane_buckling
+
+        L = self.inp.taper.length
+        return self._get(("x",), lambda: in_plane_buckling(
+            self.inp.taper.at, self.P, 0.0, L, E=self.E, method=self.method))
+
+    def axial(self, a: float, b: float) -> float:
+        from .nonprismatic import out_of_plane_buckling
+
+        return self._get(("yz", round(a, 3), round(b, 3)), lambda: out_of_plane_buckling(
+            self.inp.taper.at, a, b, P=self.P, E=self.E, G=self.G, method=self.method))
+
+    def ltb(self, a: float, b: float) -> float:
+        from .nonprismatic import out_of_plane_buckling
+
+        return self._get(("ltb", round(a, 3), round(b, 3)), lambda: out_of_plane_buckling(
+            self.inp.taper.at, a, b, M=self.M, E=self.E, G=self.G, method=self.method))
+
+    def equivalent_lb(self, f_res, s: WeldedI, comp: str, Fe: float, Lb: float) -> tuple[float, str, float]:
+        """Lb,eq (mm) for Fe in the Chapter F section pyaisc360 dispatched to; also its name and kappa.
+
+        The numerical Fe is the EXACT elastic value; AISC's F4-5 / F5-4 are
+        deliberately below it (rt counts a sixth of the web; F5 drops J).  So
+        Fe is first scaled by kappa = Fe,AISC / Fe,exact of THIS section over
+        the segment's own Lb under uniform moment (exact: the closed form with
+        the Wagner term).  On a prismatic member under uniform moment that
+        gives Lb,eq = Lb - AISC to the digit - and AISC's margin is kept.
+        kappa = 1 in F2 (F2-4 is the exact solution of a doubly symmetric I).
+        """
+        from pyaisc360.chapter_f import aw_ratio, rt_effective_radius
+
+        from .nonprismatic import equivalent_unbraced_length, stability_properties
+
+        if not math.isfinite(Fe):
+            return 0.0, "no LTB demand", 1.0
+        sections = {str(ls.citation.section)[:2] for ls in f_res.limit_states}
+        if comp == "top":
+            Sxc, bfc, tfc, Iyc = s.Sx_top, s.bf_top, s.tf_top, s.Iyc
+        else:
+            Sxc, bfc, tfc, Iyc = s.Sx_bot, s.bf_bot, s.tf_bot, s.Iyt
+        if "F5" in sections:
+            r, j, how = rt_effective_radius(bfc, aw_ratio(s.hc(comp), s.tw, bfc, tfc)), 0.0, "F5-4"
+        elif "F4" in sections:
+            r = rt_effective_radius(bfc, aw_ratio(s.hc(comp), s.tw, bfc, tfc))
+            j, how = (0.0 if Iyc / s.Iy <= 0.23 else s.J / (Sxc * s.ho)), "F4-5"
+        elif sections & {"F2", "F3"}:
+            r, j, how = math.sqrt(math.sqrt(s.Iy * s.Cw) / s.Sx), s.J / (s.Sx * s.ho), "F2-4"
+        else:
+            raise DesignError(f"DG 25 LTB: unexpected Chapter F branch {sorted(sections)}")
+        E, G = self.E, self.G
+        fe_aisc = math.pi ** 2 * E / (Lb / r) ** 2 * math.sqrt(1.0 + 0.078 * j * (Lb / r) ** 2)
+        beta = stability_properties(s).beta
+        bx = -beta if comp == "top" else beta              # > 0 when the larger flange is the compressed one
+        me = (math.pi ** 2 * E * s.Iy / Lb ** 2) * (bx / 2.0 + math.sqrt(
+            (bx / 2.0) ** 2 + s.Cw / s.Iy * (1.0 + G * s.J * Lb ** 2 / (math.pi ** 2 * E * s.Cw))))
+        kappa = fe_aisc / (me / Sxc)
+        return equivalent_unbraced_length(kappa * Fe, r, E=E, j_term=j), how, kappa
+
+    def compression(self, st, s: WeldedI, a: float, b: float, E_ksi: float, Fy_ksi: float, basis) -> MemberCheck:
+        from pyaisc360.chapter_e import OMEGA_C, PHI_C, flexural_buckling_stress_E3
+
+        lx, lo = self.in_plane(), self.axial(a, b)
+        gam = min(lx, lo)
+        fr = st.P * 1.0e3 / s.A                                          # MPa
+        Fe = mpa_to_ksi(gam * fr)
+        Fcr, _ = flexural_buckling_stress_E3(math.pi * math.sqrt(E_ksi / Fe), E_ksi, Fy_ksi)   # E3-2 / E3-3
+        Ae_in, e7 = _e7_effective_area(s, E_ksi, Fy_ksi, Fcr)
+        Pn = Fcr * Ae_in
+        Pc = kip_to_kn(Pn * PHI_C if basis.name == "LRFD" else Pn / OMEGA_C)
+        mode = "in-plane" if lx <= lo else "out-of-plane (flexural-torsional)"
+        note = (f"DG 25: gamma_e = {gam:.3f} ({mode}; in plane {lx:.3f} over the member, out of plane "
+                f"{lo:.3f} over {a:.0f}-{b:.0f} mm, {self.method}), Fe = {gam * fr:.0f} MPa, "
+                f"Fcr = {ksi_to_mpa(Fcr):.0f} MPa")
+        Ag_in = mm2_to_in2(s.A)
+        note += f", E7: Ae/Ag = {Ae_in / Ag_in:.3f} ({e7})" if Ae_in < Ag_in else ", E7: Ae = Ag"
+        return _mk(f"Compression (DG 25 {mode} buckling)",
+                   "AISC 360-16 Eqs. E3-2/E3-3 with Fe = gamma_e fr, E7-1; AISC Design Guide 25 approach "
+                   "(NOT VERIFIED)", st.P, Pc, "kN", note=note)
+
+    def cross_check(self, worst, inp, steel, basis, classes) -> list[MemberCheck]:
+        """Re-run the governing station with the Ritz method; note the difference on each check."""
+        other = _Stability(inp, steel, method="ritz")
+        other.bind(worst["combo"], inp.forces[worst["combo"]])
+        again = _check_station(section=worst["section"], st=worst["station"], inp=inp,
+                               stations=inp.forces[worst["combo"]], steel=steel, basis=basis,
+                               classes=classes, dg25=other)
+        by_name = {c.name.split(" (")[0]: c for c in again}
+        out = []
+        for c in worst["checks"]:
+            r = by_name.get(c.name.split(" (")[0])
+            if r is not None and "DG 25" in c.note and c.capacity > 0:
+                diff = (r.capacity - c.capacity) / c.capacity
+                c = MemberCheck(name=c.name, reference=c.reference, demand=c.demand, capacity=c.capacity,
+                                ratio=c.ratio, unit=c.unit,
+                                note=f"{c.note}; Ritz cross-check {r.capacity:.1f} {c.unit} ({100 * diff:+.2f} %)")
+            out.append(c)
+        return out
 
 
 def _e7_effective_area(section: WeldedI, E_ksi: float, Fy_ksi: float, Fcr: float):
@@ -1169,12 +1349,15 @@ def station_utilisations(inp: MemberDesignInput, combo: str) -> tuple[float, ...
         combined_axial_flexure,
     )
 
+    dg25 = _stability_context(inp, steel)
+    if dg25 is not None:
+        dg25.bind(combo, stations)
     out: list[float] = []
     for st in stations:
         section = inp.taper.at(min(max(st.station, 0.0), L))
         checks = _check_station(
             section=section, st=st, inp=inp, stations=stations,
-            steel=steel, basis=basis, classes=classes,
+            steel=steel, basis=basis, classes=classes, dg25=dg25,
         )
         out.append(max((c.ratio for c in checks), default=0.0))
     return tuple(out)
