@@ -1,5 +1,29 @@
 # BIMSteelAuto - changelog
 
+## 0.15.1 - 2026-11-08 - DG 25: the other flange's restraints inside a segment
+
+`stability="dg25"` now also models the other flange's restraints. A compression-flange segment can still have the
+other flange held inside it: a rafter's bottom-flange segment between fly braces has a purlin on the top flange every
+1.25 m. Those points are now rigid lateral restraints AT THAT FLANGE in the elastic buckling solve (LTB and axial).
+They are not restraints at the shear centre. Without them the sagging part of a reversing moment buckled sideways
+through purlins that are there.
+- On by default; `MemberDesignInput.dg25_other_flange = False` gives the bare segment.
+- The note on the sheet counts the restraints used.
+- Still NOT VERIFIED: whether DG 25's own procedure takes such restraints is to be confirmed.
+
+`nonprismatic.out_of_plane_buckling(..., restraints=[(x, e)])`: e is the height of the restrained point above the
+shear centre (`flange_height(section, "top" | "bottom")`). It is a penalty spring of 1e6 x E Iy / L^3 of the segment,
+in both methods. The penalty is scaled on the physical lateral stiffness: the dofs mix mm and radians, and a penalty
+taken from the largest diagonal ill-conditioned the eigenproblem; a test pins it.
+
+**Tests:**
+- A restraint at the shear centre at midspan gives the half-length closed form (LTB, and axial min(Pey(L/2), Pez(L))).
+- A compression-flange restraint at midspan is a full brace, while a tension-flange restraint adds less than 5 %, in
+  both bending directions. This pins the sign convention.
+- The penalty is rigid by 1e6 (1e8 within 1e-4); the two methods agree.
+- A rafter-like beam: the utilisations along the long bottom-flange segment drop with the purlins (0.229 to 0.129
+  where the bare segment's buckling dominated).
+
 ## 0.15.0 - 2026-11-08 - Nonprismatic members: elastic buckling and the Design Guide 25 approach (NOT VERIFIED)
 
 New module `design/nonprismatic.py` and an opt-in `MemberDesignInput.stability = "dg25"`. The default stays

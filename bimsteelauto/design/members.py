@@ -292,6 +292,9 @@ class MemberDesignInput:
     #: elastic buckling loads (design/nonprismatic.py, the AISC Design Guide 25
     #: approach) - NOT VERIFIED, opt-in, see nonprismatic.VERIFIED.
     stability: str = "prismatic"
+    #: With stability="dg25": the other flange's brace points inside a
+    #: compression-flange segment are lateral restraints at that flange.
+    dg25_other_flange: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -680,14 +683,15 @@ def _check_station(
         # station, turned into the Lb that gives the same elastic LTB stress
         # in the section's own Chapter F equation, then Chapter F with Cb = 1
         # (the moment gradient is inside gamma_LTB).
-        gam = dg25.ltb(a, b)
+        gam = dg25.ltb(a, b, which)
         fr = abs(st.Mz) * 1.0e6 / Sxc                                  # MPa
         Lb_eq, how, kappa = dg25.equivalent_lb(f_res, section, comp_flange, gam * fr if fr > 0 else math.inf, Lb)
         fm = FlexuralMember(section=adapted, steel=steel, shape=ShapeType.BUILT_UP_I,
                             Lb=mm_to_in(Lb_eq), Cb=1.0)
         f_res = _dispatch_flexure(flexural_strength, fm, basis, section_kwargs)
         f_ref = f"{_cite(f_res)}; LTB by the AISC Design Guide 25 approach (NOT VERIFIED)"
-        f_note = (f"DG 25: segment {a:.0f}-{b:.0f} mm ({which} flange), gamma_LTB = {gam:.3f} "
+        f_note = (f"DG 25: segment {a:.0f}-{b:.0f} mm ({which} flange, "
+                  f"{len(dg25.restraints(a, b, which))} other-flange restraints inside), gamma_LTB = {gam:.3f} "
                   f"({dg25.method}), Fe,LTB = {gam * fr:.0f} MPa x kappa {kappa:.3f}, Lb,eq = {Lb_eq:.0f} mm by {how}, Cb = 1")
     Mc = kipin_to_knm(f_res.available)
     checks.append(
@@ -858,7 +862,7 @@ def _check_station(
         )
         e_res = compressive_strength(cm, basis=basis)
         if dg25 is not None:
-            checks.append(dg25.compression(st, section, a, b, E_ksi, Fy_ksi, basis))
+            checks.append(dg25.compression(st, section, a, b, which, E_ksi, Fy_ksi, basis))
             Pc_kn = checks[-1].capacity
         # Sect. E7 (fix/e7-slender, 2026-11-08).  pyaisc360 applies E7 only to
         # the plate elements it is given, and a bare CompressionMember gives it
@@ -1005,17 +1009,39 @@ class _Stability:
         return self._get(("x",), lambda: in_plane_buckling(
             self.inp.taper.at, self.P, 0.0, L, E=self.E, method=self.method))
 
-    def axial(self, a: float, b: float) -> float:
+    def restraints(self, a: float, b: float, which: str) -> tuple[tuple[float, float], ...]:
+        """The OTHER flange's brace points strictly inside the segment, as (x, height above the shear centre).
+
+        A segment runs between brace points of the compression flange.  Inside
+        it the other flange may still be held - a rafter's bottom-flange
+        segment between fly braces has a purlin on the top flange every 1.25
+        m - and ignoring that would buckle the top flange where the moment
+        reverses, through restraints that are there.  Each is a rigid lateral
+        restraint AT THAT FLANGE (not at the shear centre).  Off with
+        MemberDesignInput.dg25_other_flange = False.
+        """
+        from .nonprismatic import flange_height
+
+        if not self.inp.dg25_other_flange:
+            return ()
+        other = "bottom" if which == "top" else "top"
+        L = self.inp.taper.length
+        return tuple((x, flange_height(self.inp.taper.at(x), other))
+                     for x in self.inp.bracing.points(other, L) if a + 1.0 < x < b - 1.0)
+
+    def axial(self, a: float, b: float, which: str) -> float:
         from .nonprismatic import out_of_plane_buckling
 
-        return self._get(("yz", round(a, 3), round(b, 3)), lambda: out_of_plane_buckling(
-            self.inp.taper.at, a, b, P=self.P, E=self.E, G=self.G, method=self.method))
+        return self._get(("yz", round(a, 3), round(b, 3), which), lambda: out_of_plane_buckling(
+            self.inp.taper.at, a, b, P=self.P, E=self.E, G=self.G, method=self.method,
+            restraints=self.restraints(a, b, which)))
 
-    def ltb(self, a: float, b: float) -> float:
+    def ltb(self, a: float, b: float, which: str) -> float:
         from .nonprismatic import out_of_plane_buckling
 
-        return self._get(("ltb", round(a, 3), round(b, 3)), lambda: out_of_plane_buckling(
-            self.inp.taper.at, a, b, M=self.M, E=self.E, G=self.G, method=self.method))
+        return self._get(("ltb", round(a, 3), round(b, 3), which), lambda: out_of_plane_buckling(
+            self.inp.taper.at, a, b, M=self.M, E=self.E, G=self.G, method=self.method,
+            restraints=self.restraints(a, b, which)))
 
     def equivalent_lb(self, f_res, s: WeldedI, comp: str, Fe: float, Lb: float) -> tuple[float, str, float]:
         """Lb,eq (mm) for Fe in the Chapter F section pyaisc360 dispatched to; also its name and kappa.
@@ -1057,10 +1083,10 @@ class _Stability:
         kappa = fe_aisc / (me / Sxc)
         return equivalent_unbraced_length(kappa * Fe, r, E=E, j_term=j), how, kappa
 
-    def compression(self, st, s: WeldedI, a: float, b: float, E_ksi: float, Fy_ksi: float, basis) -> MemberCheck:
+    def compression(self, st, s: WeldedI, a: float, b: float, which: str, E_ksi: float, Fy_ksi: float, basis) -> MemberCheck:
         from pyaisc360.chapter_e import OMEGA_C, PHI_C, flexural_buckling_stress_E3
 
-        lx, lo = self.in_plane(), self.axial(a, b)
+        lx, lo = self.in_plane(), self.axial(a, b, which)
         gam = min(lx, lo)
         fr = st.P * 1.0e3 / s.A                                          # MPa
         Fe = mpa_to_ksi(gam * fr)
@@ -1070,7 +1096,8 @@ class _Stability:
         Pc = kip_to_kn(Pn * PHI_C if basis.name == "LRFD" else Pn / OMEGA_C)
         mode = "in-plane" if lx <= lo else "out-of-plane (flexural-torsional)"
         note = (f"DG 25: gamma_e = {gam:.3f} ({mode}; in plane {lx:.3f} over the member, out of plane "
-                f"{lo:.3f} over {a:.0f}-{b:.0f} mm, {self.method}), Fe = {gam * fr:.0f} MPa, "
+                f"{lo:.3f} over {a:.0f}-{b:.0f} mm with {len(self.restraints(a, b, which))} other-flange restraints, "
+                f"{self.method}), Fe = {gam * fr:.0f} MPa, "
                 f"Fcr = {ksi_to_mpa(Fcr):.0f} MPa")
         Ag_in = mm2_to_in2(s.A)
         note += f", E7: Ae/Ag = {Ae_in / Ag_in:.3f} ({e7})" if Ae_in < Ag_in else ", E7: Ae = Ag"
