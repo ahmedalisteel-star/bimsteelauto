@@ -1,5 +1,42 @@
 # BIMSteelAuto - changelog
 
+## 0.14.3 - 2026-11-08 - FIX: AISC 360-16 Sect. E7 was never applied (slender elements in compression)
+
+**Re-check every member result from earlier runs - in particular Jobs 16 and
+17: compression capacity was overstated for slender webs** (and for slender
+flanges). This adds to the 0.14.1 re-check note below.
+
+`design.members._check_station` built pyaisc360's `CompressionMember` without
+plate elements. pyaisc360 applies Sect. E7 only to the elements it is given,
+so every web and flange was taken as nonslender and Pn = Fcr Ag. A PEB web
+is far past the Table B4.1a limit (h/tw ~ 97 against 1.49 sqrt(E/Fy) ~ 36 at
+345 MPa). The overstatement fed into the compression ratio and the H1
+interaction, and also into `available_strengths` (connection design forces).
+
+Now the actual plates go into the E7 effective area in every compression check:
+- the web: b = h (clear depth), t = tw, case 5, Table E7.1 row (a);
+- each flange separately: b = bf/2, t = tf, case 2 with kc from h/tw, row (c).
+
+be comes from Eqs. E7-2/E7-3/E7-5 at the governing Fcr (threshold
+lambda_r sqrt(Fy/Fcr)), and Pn = Fcr Ae (E7-1). The deduction uses
+pyaisc360's own E7 functions. Its `effective_area()` cannot take a built-up
+flange, because it does not pass h/tw for kc, so the plates are summed in
+bimsteelauto (`_e7_effective_area`). The check's note prints Ae/Ag and each
+reduced plate's be/b.
+
+**Tests** (`tests/test_e7_slender.py`): E3, E4 and E7 are written out
+longhand from the plate dimensions.
+- 800 x 8 web, 250 x 12 flanges (h/tw = 97, S355, Lc 6000/1500 mm): Ae/Ag =
+  0.719 and phi Pn = 2557 kN, against 3555 kN before. This is the negative
+  control: the section must lose capacity.
+- A stocky section is unchanged.
+- A web that is slender by B4.1 but under the E7-2 threshold in a long column
+  keeps its full area, and the same section as a short column loses area.
+- A singly-symmetric section reduces only its slender flange.
+
+New coverage gap recorded: a singly-symmetric section's compression uses the
+doubly symmetric E4 branch (yo not passed).
+
 ## 0.14.2 - 2026-11-08 - ModelSettings: stiffness_factor and min_segments
 
 Two modelling settings, both defaulting to the old behaviour (nothing changes
