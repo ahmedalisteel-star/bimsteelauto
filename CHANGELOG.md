@@ -1,5 +1,28 @@
 # BIMSteelAuto - changelog
 
+## 0.14.2 - 2026-11-08 - ModelSettings: stiffness_factor and min_segments
+
+Two modelling settings, both defaulting to the old behaviour (nothing changes
+unless they are set):
+
+- `stiffness_factor` (default 1.0, must lie in (0, 1]): E and G of the steel
+  - so EI, EA and GJ - times this. 0.8 is the AISC 360-16 C2.3(a) reduction
+  for the Direct Analysis Method (permitted on all members); serviceability
+  stays on 1.0. Requested by Manafe3, which applied it through a subclass.
+- `min_segments` (default 1): at least this many solver elements per design
+  member, whatever the taper rule gives. PyNite captures P-delta (the
+  member's own curvature) only through the nodes between elements: a constant
+  member left as one element misses most of it. AISC 360-16 C2.1 asks for
+  P-Delta AND P-delta.
+
+**Tests** (`tests/test_model_settings.py`): a braced pin-ended column at
+P/Pe = 0.30 under a small lateral load - 4 elements give the midheight moment
+within 2 % of the AISC B1 value and 1 % of the exact beam-column value
+(measured: 1 element 1.225, 2 -> 1.355, 4 -> 1.433, 8 -> 1.441, exact 1.441);
+one element falls 15 % short (the negative control); a frame with k = 0.8
+moves exactly 1/0.8 as far under a lateral load with identical forces; the
+settings are validated.
+
 ## 0.14.1 - 2026-11-08 - FIX: the compression flange was chosen backwards
 
 **Re-check every member result from earlier runs - in particular Jobs 16 and

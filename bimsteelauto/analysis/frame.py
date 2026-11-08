@@ -298,6 +298,18 @@ class ModelSettings:
     stations_per_member: int = 21
     #: PyNite P-Delta iteration cap.
     p_delta_max_iter: int = 30
+    #: Every stiffness (E and G of the steel, so EI, EA, GJ) times this.
+    #: 1.0 = the nominal frame.  0.8 is the AISC 360-16 C2.3(a) reduction for
+    #: the Direct Analysis Method (permitted on all members); serviceability
+    #: is judged on 1.0.  Stated here, not hidden in a subclass.
+    stiffness_factor: float = 1.0
+    #: At least this many solver elements per design member, whatever the
+    #: taper rule gives.  PyNite's P-Delta solution captures P-delta (the
+    #: member's own curvature) only through the nodes between elements: a
+    #: constant member left as ONE element has no P-delta at all.  AISC
+    #: 360-16 C2.1 asks for both P-Delta and P-delta; 4 is enough for a
+    #: braced pin-ended member to within 1 % (tests/test_model_settings.py).
+    min_segments: int = 1
 
     def problems(self) -> list[str]:
         out = []
@@ -305,6 +317,10 @@ class ModelSettings:
             out.append("max_taper_step must lie in (0, 1]")
         if self.stations_per_member < 3:
             out.append("stations_per_member must be at least 3")
+        if not (0.0 < self.stiffness_factor <= 1.0):
+            out.append("stiffness_factor must lie in (0, 1]")
+        if self.min_segments < 1:
+            out.append("min_segments must be at least 1")
         return out
 
 
@@ -681,7 +697,8 @@ class FrameAnalysis:
             ) from exc
 
         model = FEModel3D()
-        model.add_material("steel", E_STEEL, _G_STEEL, _NU, _RHO_STEEL)
+        k = self.settings.stiffness_factor
+        model.add_material("steel", k * E_STEEL, k * _G_STEEL, _NU, _RHO_STEEL)
 
         # Nodes: every layout node, plus one interior node per segment break.
         for name, (x, y) in self.layout.nodes.items():
@@ -689,8 +706,11 @@ class FrameAnalysis:
 
         self._segments = {}
         for fm in self.layout.members:
-            n = fm.taper.suggested_segments(
-                max_depth_change=self.settings.max_taper_step
+            n = max(
+                fm.taper.suggested_segments(
+                    max_depth_change=self.settings.max_taper_step
+                ),
+                self.settings.min_segments,
             )
             segs = fm.taper.discretise(n)
             xi, yi = fm.i_point
