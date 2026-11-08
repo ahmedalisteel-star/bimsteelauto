@@ -1,5 +1,47 @@
 # BIMSteelAuto - changelog
 
+## 0.15.0 - 2026-11-08 - Nonprismatic members: elastic buckling and the Design Guide 25 approach (NOT VERIFIED)
+
+New module `design/nonprismatic.py` and an opt-in `MemberDesignInput.stability = "dg25"`. The default stays
+`"prismatic"`, so existing results do not change. Requested by Manafe3 (Phase 4, addition A). The user has no DG 25 copy
+yet, so every flag in `nonprismatic.VERIFIED` is False and the sheet says NOT VERIFIED. The application is to be
+confirmed equation by equation against the printed guide.
+
+- **Elastic buckling** of a segment between brace points (u = phi = 0 at the ends, free to warp), with the varying
+  section integrated along the member:
+  - in plane under P(x);
+  - out of plane, flexural-torsional, under P(x), including the shear-centre offset of a singly-symmetric I;
+  - lateral-torsional under M(x), including the Wagner term.
+
+  Two independent methods: cubic Hermite FE (16 elements by default, converged within 3e-5) and a sine-series Ritz
+  expansion.
+- **Application:**
+  - Compression: gamma_e = min(in plane over the member, K = 1 under the DAM; out of plane over the segment). At each
+    station Fe = gamma_e fr, then E3 and E7.
+  - LTB: gamma_LTB under the actual moment diagram, so Cb = 1. At each station Fe = kappa gamma_LTB fr, mapped to the Lb
+    that gives it in the dispatched F2-4 / F4-5 / F5-4, then Chapter F. kappa = Fe,AISC / Fe,exact of the section,
+    which keeps AISC's margin.
+  - The governing station is re-run with the Ritz method; the difference is printed in its note.
+- **Tests:**
+  - `tests/test_nonprismatic.py` (closed forms):
+    - Euler;
+    - the exactly solvable column I ~ x^4, Pcr = pi^2 E sqrt(I1 I2) / L^2 (derived longhand). The negative control:
+      a mid-length prismatic stand-in misses it by more than 20 %;
+    - AISC E4 for a singly-symmetric section;
+    - uniform-moment LTB of a doubly and a singly symmetric beam, with Wagner (Me 834 vs 112 kN.m between the two
+      bending directions);
+    - FE against Ritz on a tapered member within 0.5 %.
+  - `tests/test_dg25_application.py`:
+    - a prismatic member reproduces AISC exactly: uniform moment in F2, F4 (singly symmetric, both signs) and F5;
+      axial E3/E4/E7;
+    - moment to zero: elastic gradient benefit Cb ~ 1.85, inelastic 3 % below AISC;
+    - a tapered column chain checked longhand;
+    - the Ritz cross-check;
+    - refusals (K_in_plane other than 1, an unknown keyword).
+- `pipeline.OPT_IN_MODULES` holds gated modules that the pipeline does not call. design.nonprismatic is the first.
+  Their flags stay off the pipeline's sheet because nothing they compute is on it; the gate scan still accounts for
+  them, and every DG 25 check carries NOT VERIFIED itself.
+
 ## 0.14.3 - 2026-11-08 - FIX: AISC 360-16 Sect. E7 was never applied (slender elements in compression)
 
 **Re-check every member result from earlier runs - in particular Jobs 16 and

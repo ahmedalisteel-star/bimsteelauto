@@ -25,6 +25,7 @@ from bimsteelauto.design.bracing import ROD_ROOT_AREA, BraceMember, BraceType
 from bimsteelauto.loads import AreaLoad, DeadLoadBuildUp, Surface
 from bimsteelauto.pipeline import (
     ENGINE_MODULES,
+    OPT_IN_MODULES,
     BracingInputs,
     FrameInputs,
     PipelineError,
@@ -344,7 +345,7 @@ def test_every_module_with_a_gate_is_scanned() -> None:
         id(getattr(__import__(n, fromlist=["VERIFIED"]), "VERIFIED", None))
         for n in ENGINE_MODULES
     ]
-    scanned = set(ENGINE_MODULES)
+    scanned = set(ENGINE_MODULES) | set(OPT_IN_MODULES)          # opt-in gates: carried by their callers
     missing = []
     for mod in pkgutil.walk_packages(
         bimsteelauto.__path__, prefix="bimsteelauto."
