@@ -179,9 +179,11 @@ COVERAGE_GAPS: tuple[str, ...] = (
     "only (AISC J10).",
     "Serviceability deflection and drift limits are not checked in this "
     "module.",
-    "Flange and web local buckling of slender welded elements relies on "
-    "pyaisc360 Chapter F and E7; plate girder tension field action (G2.2) "
-    "is not invoked.",
+    "Flange and web local buckling of slender welded elements: Chapter F "
+    "via pyaisc360, Sect. E7 effective area on the actual plates (since "
+    "0.14.3); plate girder tension field action (G2.2) is not invoked.",
+    "Compression of a SINGLY-SYMMETRIC section is checked with the doubly "
+    "symmetric E4 branch (shear-centre offset yo not passed).",
     "TORSION IS CHECKED FOR UNIFORM (ST VENANT) SHEAR ONLY. The warping "
     "normal stress and the warping shear stress are NOT computed: they "
     "need the solution of the torsion differential equation with the "
@@ -805,15 +807,35 @@ def _check_station(
             Lcy=mm_to_in(Lcy),
         )
         e_res = compressive_strength(cm, basis=basis)
-        Pc_kn = kip_to_kn(e_res.available)
+        # Sect. E7 (fix/e7-slender, 2026-11-08).  pyaisc360 applies E7 only to
+        # the plate elements it is given, and a bare CompressionMember gives it
+        # none - it then takes every element as nonslender, which overstated
+        # the capacity of a thin PEB web (h/tw ~ 100 against lambda_r ~ 36).
+        # The library's own effective_area() cannot take a built-up flange
+        # (Table B4.1a case 2 needs h/tw for kc, and it does not pass it), so
+        # the deduction is made here with the library's E7 primitives, element
+        # by element, at the governing Fcr of the run above (whose Ae = Ag).
+        Ag_in = mm2_to_in2(section.A)
+        Fcr = min(ls.nominal for ls in e_res.limit_states) / Ag_in
+        Ae_in, e7 = _e7_effective_area(section, E_ksi, Fy_ksi, Fcr)
+        Pn = Fcr * Ae_in
+        avail = Pn * e_res.phi if basis.name == "LRFD" else Pn / e_res.omega
+        Pc_kn = kip_to_kn(avail)
+        note = f"Lcx = {inp.K_in_plane * L:.0f} mm, Lcy = {Lcy:.0f} mm"
+        ref = _cite(e_res)
+        if Ae_in < Ag_in:
+            ref = f"{ref}; AISC 360-16 Eqs. E7-1, E7-2/E7-3, E7-5 (Sect. E7)"
+            note += f", E7: Ae/Ag = {Ae_in / Ag_in:.3f} ({e7})"
+        else:
+            note += ", E7: all elements fully effective (Ae = Ag)"
         checks.append(
             _mk(
                 f"Compression ({e_res.governing.limit_state.value})",
-                _cite(e_res),
+                ref,
                 st.P,
                 Pc_kn,
                 "kN",
-                note=f"Lcx = {inp.K_in_plane * L:.0f} mm, Lcy = {Lcy:.0f} mm",
+                note=note,
             )
         )
     elif st.P < 0.0:  # tension
@@ -876,6 +898,43 @@ def _check_station(
         )
 
     return checks
+
+
+def _e7_effective_area(section: WeldedI, E_ksi: float, Fy_ksi: float, Fcr: float):
+    """AISC 360-16 Sect. E7 effective area of a welded I, in.^2.
+
+    Ae = Ag - sum (b - be) t   (the Sect. E7 User Note), over the actual plates:
+
+        web          b = h (clear depth), t = tw, Table B4.1a case 5 (I_WEB),
+                     Table E7.1 row (a) - stiffened
+        each flange  b = bf/2, t = tf, Table B4.1a case 2 (BUILT_UP_I_FLANGE,
+                     lambda_r with kc from h/tw), Table E7.1 row (c)
+
+    be from Eq. E7-2 / E7-3 with Fel from Eq. E7-5, all by pyaisc360's own
+    functions; the threshold is lambda_r sqrt(Fy/Fcr), not lambda_r.  Top and
+    bottom flanges are separate elements, so a singly-symmetric section is
+    handled without doubling either.  Returns (Ae, text for the note).
+    """
+    from pyaisc360.chapter_b import AxialElement, limiting_width_to_thickness
+    from pyaisc360.chapter_e import _TABLE_E7_1, _e7_case, c2_from_c1, effective_width
+
+    h_tw = section.lambda_web
+    plates = (
+        ("web", AxialElement.I_WEB, section.h, section.tw),
+        ("top flange", AxialElement.BUILT_UP_I_FLANGE, section.bf_top / 2.0, section.tf_top),
+        ("bottom flange", AxialElement.BUILT_UP_I_FLANGE, section.bf_bot / 2.0, section.tf_bot),
+    )
+    Ae = mm2_to_in2(section.A)
+    parts = []
+    for name, kind, b_mm, t_mm in plates:
+        b, t = mm_to_in(b_mm), mm_to_in(t_mm)
+        lam_r = limiting_width_to_thickness(kind, E_ksi, Fy_ksi, h_over_tw=h_tw)
+        c1 = _TABLE_E7_1[_e7_case(kind)][0]
+        be = effective_width(b, b / t, lam_r, Fy_ksi, Fcr, c1, c2_from_c1(c1))
+        if be < b:
+            Ae -= (b - be) * t
+            parts.append(f"{name} be/b = {be / b:.3f}")
+    return Ae, ", ".join(parts)
 
 
 def _dispatch_flexure(flexural_strength, member, basis, kwargs: dict[str, Any]):
