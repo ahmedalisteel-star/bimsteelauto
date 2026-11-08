@@ -1,5 +1,45 @@
 # BIMSteelAuto - changelog
 
+## 0.14.1 - 2026-11-08 - FIX: the compression flange was chosen backwards
+
+**Re-check every member result from earlier runs - in particular Jobs 16 and
+17.** Utilisations, governing checks and unbraced lengths reported before
+this fix may be wrong; connections, base plates and stress contours used |M|
+and are not affected.
+
+PyNite reports `Mz` positive for TENSION on the member's local +y face (a
+simply supported beam under gravity gives a NEGATIVE midspan moment).
+`design.members.check_member` reads `Mz >= 0` as "TOP flange in compression",
+and `analysis.frame._extract` (and the 3D `analysis.space._extract`) passed
+PyNite's value through unchanged. So the compression flange - and with it the
+brace set (Lb), `Sxc` and the flange slenderness - was taken from the wrong
+side:
+
+- under GRAVITY the haunch and knee (bottom / inner flange in compression)
+  were checked with the purlin- / girt-braced top flange's short Lb -
+  UNCONSERVATIVE;
+- under UPLIFT the opposite error, on the conservative side.
+
+Found by Manafe3 (Phase 4 step 1) while mapping restraint points.
+
+**Fix:** one conversion at the PyNite boundary,
+`analysis.frame.design_moment_factor(member_type, i, j, width)`, applied in
+both `_extract`s: `StationForces.M` (and the 3D frame members' `Mz`) is now
+positive when the member's TOP flange is in compression (rafter: top flange;
+column: the outer flange; interior column: the -X flange, a convention). It
+follows PyNite's own local-axis rule (`Member3D.T`, Y up), including the case
+where it bites: an exactly vertical right-hand column, whose local y points
+INTO the frame. Secondary members in the 3D model keep PyNite's sign (their
+design does not read it).
+
+**Tests** (`tests/test_moment_sign.py`, 9): PyNite's own sign on a simple
+beam; the same beam through `FrameAnalysis` -> +wL^2/8 and the flexure check
+on the TOP flange's bracing (sagging compresses the top flange); a pinned
+portal under gravity -> negative at the haunch and at the top of BOTH
+columns, and the knee checked on the BOTTOM flange's bracing; the factor
+table. Both physics tests FAIL on the code before the fix. The other 976
+tests are unchanged - none of them pinned which flange is compressed.
+
 ## 0.14.0 - 2026-10-29 - fabrication drawings from the IFC (stage 5, steps 3-4)
 
 The fabrication drawings were drawn from `model.json` by the steel-project

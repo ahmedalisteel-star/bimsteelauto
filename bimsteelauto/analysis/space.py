@@ -113,6 +113,7 @@ from .frame import (
     LoadDirection,
     ModelSettings,
     build_layout,
+    design_moment_factor,
 )
 
 __all__ = [
@@ -1137,6 +1138,21 @@ class SpaceAnalysis:
         # contract as FrameAnalysis._extract, so the two models can be laid
         # side by side without anyone converting a station.
         out_stations: dict[str, dict[str, tuple[SpaceStation, ...]]] = {}
+        # PyNite's Mz -> the design sign for the frame members, exactly as the
+        # plane frame does it (frame.design_moment_factor). They lie in an XY
+        # plane (Y up), so PyNite's local y is in that plane too. Secondary and
+        # rolled members keep PyNite's sign: their design does not read it.
+        by_mark = {m.mark: m for m in self.layout.members}
+        width = self.layout.geometry.width
+
+        def m_sign(name: str) -> float:
+            sm = by_mark.get(name)
+            if sm is None or not sm.is_primary or abs(sm.rotation) > 1e-12:
+                return 1.0
+            return design_moment_factor(
+                sm.member_type, sm.i_point[:2], sm.j_point[:2], width
+            )
+
         for key, entries in self.layout.segments.items():
             total = entries[-1][2] if entries else 0.0
             per_combo: dict[str, tuple[SpaceStation, ...]] = {}
@@ -1156,7 +1172,7 @@ class SpaceAnalysis:
                                 Vz=mem.shear("Fz", xl, combo) / kn,
                                 T=mem.torque(xl, combo) / knm,
                                 My=mem.moment("My", xl, combo) / knm,
-                                Mz=mem.moment("Mz", xl, combo) / knm,
+                                Mz=m_sign(mem_name) * mem.moment("Mz", xl, combo) / knm,
                             )
                         )
                 per_combo[combo] = tuple(sorted(sts, key=lambda t: t.x))

@@ -41,6 +41,14 @@ Sign convention on results
 ``P`` is positive in COMPRESSION, matching :class:`MemberForces` in
 ``spec.py`` and the AISC chapter it is most often handed to.
 
+``M`` is positive when the member's TOP flange is in COMPRESSION (a rafter
+sagging; a column whose outer flange is compressed) - the sign
+``design.members.check_member`` reads to choose the compression flange.
+PyNite's own ``Mz`` is positive for tension on the local +y face; the one
+conversion is :func:`design_moment_factor`, applied in ``_extract``.
+(Before fix/moment-sign, 2026-11-08, PyNite's value went through unchanged
+and the compression flange was chosen backwards.)
+
 PyNite uses the same convention - verified empirically, not assumed: a
 3 m member with a 10 kN downward load at its top returns ``axial() =
 +10000``.  The first version of this module flipped the sign on the way out
@@ -69,6 +77,7 @@ from ..spec import (
 
 __all__ = [
     "VERIFIED",
+    "design_moment_factor",
     "AnalysisError",
     "BaseFixity",
     "LoadDirection",
@@ -127,6 +136,61 @@ VERIFIED: dict[str, bool] = {
 _N_PER_KN = 1000.0
 #: mm per m.  Line loads arrive in kN/m and must become N/mm.
 _MM_PER_M = 1000.0
+
+
+# ---------------------------------------------------------------------------
+# Moment sign - the ONE conversion at the PyNite boundary (fix/moment-sign)
+# ---------------------------------------------------------------------------
+
+
+def design_moment_factor(
+    member_type: MemberType,
+    i_xy: tuple[float, float],
+    j_xy: tuple[float, float],
+    width: float,
+) -> float:
+    """Multiply PyNite's ``Mz`` by this to get the DESIGN sign.
+
+    PyNite reports ``Mz`` positive for TENSION on the member's local +y face
+    (a simply supported beam under gravity gives a NEGATIVE midspan moment -
+    ``tests/test_moment_sign.py``).  The design layer
+    (:func:`bimsteelauto.design.members.check_member`) reads ``Mz >= 0`` as
+    "the TOP flange is in compression".  Before this function existed the
+    PyNite value went through unchanged, so the compression flange - and with
+    it the brace set (Lb), ``Sxc`` and the flange slenderness - was chosen
+    backwards: under gravity the haunch was checked with the purlin-braced
+    top flange's short Lb while the bottom flange was the one in compression.
+
+    The member's TOP flange is the one the bracing calls "top":
+
+    ======================  ===================================
+    rafter                  the top flange (purlins on it)
+    column                  the OUTER flange (girts on it)
+    interior column         the flange facing -X (a convention:
+                            it has no girts and no outer face)
+    ======================  ===================================
+
+    PyNite's local +y (``Member3D.T``, Y up): an exactly vertical member
+    going up has y = -X, going down y = +X; any other member has its local y
+    perpendicular to it with an UPWARD component.  So the factor is -1 when
+    local +y is the top face and +1 when it is the bottom face - a vertical
+    right-hand column is the case where it is +1.
+    """
+    (xi, yi), (xj, yj) = i_xy, j_xy
+    if member_type in (MemberType.RAFTER, MemberType.ENDWALL_RAFTER):
+        top = (0.0, 1.0)
+    elif member_type is MemberType.INTERIOR_COLUMN:
+        top = (-1.0, 0.0)
+    else:
+        top = (-1.0, 0.0) if (xi + xj) / 2.0 < width / 2.0 else (1.0, 0.0)
+    if math.isclose(xi, xj):
+        ly = (-1.0, 0.0) if yj > yi else (1.0, 0.0)
+    else:
+        L = math.hypot(xj - xi, yj - yi)
+        ly = (-(yj - yi) / L, (xj - xi) / L)
+        if ly[1] < 0.0:
+            ly = (-ly[0], -ly[1])
+    return -1.0 if ly[0] * top[0] + ly[1] * top[1] > 0.0 else 1.0
 
 #: Shear modulus of steel, MPa.  G = E / (2(1+nu)) with nu = 0.30.
 _NU = 0.30
@@ -440,7 +504,9 @@ class StationForces:
     x: float          # mm from the member's i end
     P: float          # positive COMPRESSION
     V: float          # in-plane shear
-    M: float          # in-plane moment
+    M: float          # in-plane moment, positive = TOP flange in COMPRESSION
+    #                   (rafter: sagging; column: inner face in tension) -
+    #                   see design_moment_factor
 
     def to_member_forces(self) -> MemberForces:
         return MemberForces(P=self.P, Vy=self.V, Mz=self.M, station=self.x)
@@ -800,6 +866,10 @@ class FrameAnalysis:
 
         for fm in self.layout.members:
             per_combo: dict[str, tuple[StationForces, ...]] = {}
+            # PyNite's Mz -> the design sign (+ = TOP flange in compression).
+            m_sign = design_moment_factor(
+                fm.member_type, fm.i_point, fm.j_point, self.layout.geometry.width
+            )
             for combo in self._combos:
                 out: list[StationForces] = []
                 for mem_name, x0, x1 in self._segments[fm.mark]:
@@ -816,7 +886,7 @@ class FrameAnalysis:
                                 # positive - see the module docstring.
                                 P=mem.axial(xl, combo) / _N_PER_KN,
                                 V=mem.shear("Fy", xl, combo) / _N_PER_KN,
-                                M=mem.moment("Mz", xl, combo)
+                                M=m_sign * mem.moment("Mz", xl, combo)
                                 / (_N_PER_KN * _MM_PER_M),
                             )
                         )
