@@ -1,5 +1,25 @@
 # BIMSteelAuto - changelog
 
+## 0.15.2 - 2026-11-11 - Anchor rods: ISO 898-1 property class 4.6
+
+`bimsteelauto_connections.anchors.ANCHOR_GRADES["4.6"]`: fya 240 MPa, futa 400 MPa (ISO 898-1:2013 Table 3: ReL min
+240, Rm min 400 MPa, elongation A min 22 %). Requested by Manafe3 (Phase 5 step 2b, the user's default anchor grade).
+- **Not ductile** (`ductile=False`): ISO 898-1 gives no minimum reduction of area for 4.6, and ACI 318-19 Sect. 2.3 needs
+  elongation >= 14 % AND reduction of area >= 30 %. So the steel modes take phi 0.65 (tension) / 0.60 (shear), 17.5.3,
+  until the rod supplier's certificate shows Z >= 30 % (user decision 2026-11-11).
+- New `GRADE_SOURCES`: where a grade's values come from and whether they were checked against that source. 4.6:
+  `checked_against_source = False` (to confirm against the printed standard). The ACI 318 relations and their VERIFIED
+  gate are unchanged.
+
+**Plate grades St 37 / St 44 / St 52** (`bolts._PLATE_GRADES`, ECP 205-LRFD Sect. 1.3.3 / Table 1.1; the ecp205-lrfd
+library's values in t/cm2 x 98.0665, confirmed by the user against the printed code 2026-11-08): t <= 40 / 40-100 mm —
+St 37 235.36 / 362.85, 210.84 / 333.43; St 44 274.59 / 431.49, 250.07 / 402.07; St 52 353.04 / 509.95, 328.52 / 480.53
+(Fy / Fu MPa). "St 37" and "ST37" both work. Requested by Manafe3 so Egypt jobs get base plates.
+
+**Tests** (`tests/test_anchor_grade_4_6.py`, `tests/test_plate_grades_ecp.py`, hand values): M20 steel tension 0.65 x 245
+x 400 = 63.70 kN, steel shear 0.60 x 0.6 x 245 x 400 = 35.28 kN; F1554 Gr 36 keeps phi 0.75 (73.50 kN), the negative
+control; the six ECP values at both thickness bands, 120 mm and an unknown grade refused.
+
 ## 0.15.1 - 2026-11-08 - DG 25: the other flange's restraints inside a segment
 
 `stability="dg25"` now also models the other flange's restraints. A compression-flange segment can still have the

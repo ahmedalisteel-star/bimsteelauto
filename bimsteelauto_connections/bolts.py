@@ -120,6 +120,13 @@ _PLATE_GRADES: Final[dict[str, tuple[tuple[float, float, float], ...]]] = {
     "A36":     ((200.0, 250.0, 400.0),),
     "A572-50": ((100.0, 345.0, 450.0),),
     "A992":    ((100.0, 345.0, 450.0),),
+    # ---- ECP 205-LRFD (2008) Sect. 1.3.3 / Table 1.1 (added 0.15.2 at Manafe3's request) ----
+    # The values of the ecp205-lrfd library (materials.STEEL_GRADES, t/cm2) x 98.0665 MPa per t/cm2,
+    # rounded to 0.01 MPa; confirmed by the user against the printed code on 2026-11-08.
+    # t <= 40 mm and 40 < t <= 100 mm. Names are case/space-insensitive: "St 37" -> "ST37".
+    "ST37": ((40.0, 235.36, 362.85), (100.0, 210.84, 333.43)),
+    "ST44": ((40.0, 274.59, 431.49), (100.0, 250.07, 402.07)),
+    "ST52": ((40.0, 353.04, 509.95), (100.0, 328.52, 480.53)),
 }
 
 # Aliases so callers can write either convention.

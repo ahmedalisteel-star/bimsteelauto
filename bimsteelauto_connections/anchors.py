@@ -124,6 +124,22 @@ ANCHOR_GRADES: Final[dict[str, AnchorGrade]] = {
     # EN property classes
     "8.8": AnchorGrade("8.8", 640.0, 800.0),
     "10.9": AnchorGrade("10.9", 900.0, 1000.0),
+    # ISO 898-1 property class 4.6 (added 0.15.2 at Manafe3's request, 2026-11-11):
+    # ReL min 240 MPa, Rm min 400 MPa, elongation A min 22 % (ISO 898-1:2013 Table 3).
+    # ductile=False: ISO 898-1 gives no minimum reduction of area for 4.6, and ACI 318-19
+    # Sect. 2.3 needs elongation >= 14 % AND reduction of area >= 30 % for a ductile steel
+    # element. Brittle (phi 0.65 tension / 0.60 shear, 17.5.3) until the rod supplier's
+    # certificate shows Z >= 30 %. Values NOT yet checked against the printed standard:
+    # see GRADE_SOURCES.
+    "4.6": AnchorGrade("4.6", 240.0, 400.0, ductile=False),
+}
+
+#: Where each grade's values come from, and whether they were checked against that source.
+#: The VERIFIED gate above is about the ACI 318 relations; material values are recorded here.
+GRADE_SOURCES: Final[dict[str, dict[str, object]]] = {
+    "4.6": {"source": "ISO 898-1:2013 Table 3 (property class 4.6): ReL 240, Rm 400 MPa, A 22 %",
+            "checked_against_source": False,
+            "ductile_basis": "no minimum reduction of area in ISO 898-1 -> not ductile per ACI 318-19 2.3"},
 }
 
 # ISO 898 metric coarse thread tensile stress areas, mm^2.
