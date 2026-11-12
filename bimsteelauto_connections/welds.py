@@ -134,6 +134,8 @@ def size_fillet_weld(
     n_welds: int = 2,
     directional_increase: bool = True,
     palette: Sequence[float] = DEFAULT_WELD_PALETTE,
+    joint: str = "edge",
+    min_leg_by: str = "thicker",
 ) -> WeldDesign:
     """Pick the smallest fillet weld that carries ``demand``.
 
@@ -162,6 +164,21 @@ def size_fillet_weld(
     directional_increase:
         Apply Sect. J2.4(a) increase.  Leave True unless the weld group
         mixes orientations, where J2.4(b) applies instead.
+    joint:
+        ``"edge"`` (default, unchanged behaviour) — the weld runs along an
+        EDGE of the thinner part (a lap joint): the Sect. J2.2b maximum
+        applies, leg <= t (t < 6 mm) or t - 2 mm.
+        ``"tee"`` — a T-joint: the part's end is welded onto the FACE of
+        the other part (a flange or a web on an end plate or a base
+        plate, a stiffener on a web).  No weld lies along a plate edge,
+        so the J2.2b edge maximum does NOT apply and no maximum leg is
+        set here; the palette is the only upper limit (the caller decides
+        where a groove weld takes over).
+    min_leg_by:
+        Which part sets the Table J2.4 minimum leg.  ``"thicker"``
+        (default, unchanged behaviour) or ``"thinner"`` — the heading of
+        AISC 360-16 Table J2.4 ("material thickness of thinner part
+        joined").
 
     Raises
     ------
@@ -180,11 +197,25 @@ def size_fillet_weld(
         raise ConnectionError_(
             f"unknown electrode {electrode!r}. Known: {', '.join(ELECTRODES)}"
         )
+    if joint not in ("edge", "tee"):
+        raise ConnectionError_(f"joint must be 'edge' or 'tee', got {joint!r}")
+    if min_leg_by not in ("thicker", "thinner"):
+        raise ConnectionError_(
+            f"min_leg_by must be 'thicker' or 'thinner', got {min_leg_by!r}"
+        )
 
     warnings: list[str] = []
     FEXX = ELECTRODES[electrode]
-    t_min_leg = min_weld_size(max(t_part1, t_part2))
-    t_max_leg = max_weld_size(min(t_part1, t_part2))
+    t_min_leg = min_weld_size(
+        max(t_part1, t_part2) if min_leg_by == "thicker"
+        else min(t_part1, t_part2)
+    )
+    # J2.2b is a rule for fillets ALONG THE EDGES of connected parts; a
+    # T-joint weld lies on the face of the through part, so it has no
+    # edge maximum.
+    t_max_leg = (
+        max_weld_size(min(t_part1, t_part2)) if joint == "edge" else math.inf
+    )
 
     if t_min_leg > t_max_leg:
         raise GeometryError(
@@ -233,8 +264,10 @@ def size_fillet_weld(
             break
 
     if chosen is None:
+        top = f"{t_max_leg:.1f}" if math.isfinite(t_max_leg) else (
+            f"{max(palette):.1f} (the palette)" if palette else "-")
         raise GeometryError(
-            f"no leg between {t_min_leg:.1f} and {t_max_leg:.1f} mm carries "
+            f"no leg between {t_min_leg:.1f} and {top} mm carries "
             f"{demand_per_weld:.1f} kN over {length:.0f} mm. "
             f"Lengthen the weld, add weld lines, or use a groove weld."
         )
@@ -490,6 +523,25 @@ def _run_invariants() -> list[tuple[str, bool, str]]:
     chk("throat = 0.707 * leg",
         math.isclose(w_long.throat, 0.707 * w_long.leg, rel_tol=1e-9),
         f"{w_long.throat:.3f} mm")
+
+    # --- T-joint mode: no J2.2b edge maximum ---
+    tee_kw = dict(demand=100.0, length=300.0, t_part1=6.0, t_part2=20.0,
+                  base_grade="S355JR", palette=(3.0, 5.0, 6.0, 8.0))
+    try:
+        size_fillet_weld(**tee_kw)
+        edge_refused = False
+    except GeometryError:
+        edge_refused = True
+    chk("edge mode refuses a 6 mm part on a 20 mm part (min 8 > max 4)",
+        edge_refused)
+    w_tee = size_fillet_weld(joint="tee", **tee_kw)
+    chk("tee mode: same joint is weldable, leg >= J2.4 minimum (thicker)",
+        w_tee.passed and w_tee.leg >= min_weld_size(20.0),
+        f"leg {w_tee.leg:.0f} mm")
+    w_tee_thin = size_fillet_weld(joint="tee", min_leg_by="thinner", **tee_kw)
+    chk("tee mode, minimum by the thinner part: smaller or equal leg",
+        w_tee_thin.leg <= w_tee.leg and w_tee_thin.leg >= min_weld_size(6.0),
+        f"{w_tee_thin.leg:.0f} <= {w_tee.leg:.0f} mm")
 
     # --- J10 ---
     c = check_column_side(

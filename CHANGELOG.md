@@ -1,5 +1,25 @@
 # BIMSteelAuto - changelog
 
+## 0.15.3 - 2026-11-12 - Fillet weld sizing: T-joint mode
+
+`bimsteelauto_connections.welds.size_fillet_weld` takes two new options; both default to the old behaviour, so every
+existing call gives the same result.
+- `joint="tee"`: the part's end is welded onto the FACE of the other part (a flange or a web on an end plate or a base
+  plate, a stiffener on a web). No weld lies along a plate edge, so the AISC 360-16 Sect. J2.2b maximum (t - 2 mm) is
+  not applied; the palette is the only upper limit and the caller decides where a groove weld takes over.
+  `joint="edge"` (default) keeps the J2.2b maximum.
+- `min_leg_by="thinner"`: the Table J2.4 minimum from the thinner part joined (the heading of AISC 360-16 Table J2.4).
+  `min_leg_by="thicker"` (default) is what the function did before. Whether the default should change is open (the
+  user's decision); nothing that calls the default was touched.
+Requested by Manafe3 (Phase 5 step 3: a 6 mm web on an 18 mm end plate was refused - minimum 6 mm > maximum 4 mm), which
+now uses this instead of its own routine.
+
+**Tests** (`tests/test_fillet_tee_joint.py`, hand values): a 6 mm web on a 20 mm plate, 100 kN on 300 mm - leg 3 mm,
+138.01 kN per line, U 0.3623 (8 mm with the thicker-part minimum); a 200 x 8 flange at full strength (568 kN, theta 90) -
+leg 8 mm, weld metal 368.04 kN, base metal 352.80 kN governs; a 300 x 25 flange is refused with a 12 mm palette (groove
+weld). Negative control: the default mode still refuses both joints, and the flange with either minimum. Three new
+invariants in `welds._run_invariants`.
+
 ## 0.15.2 - 2026-11-11 - Anchor rods: ISO 898-1 property class 4.6
 
 `bimsteelauto_connections.anchors.ANCHOR_GRADES["4.6"]`: fya 240 MPa, futa 400 MPa (ISO 898-1:2013 Table 3: ReL min
